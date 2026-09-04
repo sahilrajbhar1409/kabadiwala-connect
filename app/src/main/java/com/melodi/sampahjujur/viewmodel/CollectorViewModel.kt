@@ -116,7 +116,13 @@ class CollectorViewModel @Inject constructor(
                     _mapState.value = _mapState.value.copy(pendingMarkers = emptyList())
                 }
                 .collect { requests ->
-                    val incomingIds = requests.map { it.id }.toSet()
+                    val collectorId = authRepository.getCurrentUser()?.id
+                    val visibleRequests = if (collectorId.isNullOrBlank()) {
+                        requests
+                    } else {
+                        requests.filter { collectorId !in it.declinedBy }
+                    }
+                    val incomingIds = visibleRequests.map { it.id }.toSet()
 
                     // FCM notifications are now sent from the server when requests are created
                     // No need for local notification logic here
@@ -126,18 +132,18 @@ class CollectorViewModel @Inject constructor(
 
                     val currentState = _uiState.value
                     val filtered = applyPendingRequestFilters(
-                        requests = requests,
+                        requests = visibleRequests,
                         query = currentState.searchQuery,
                         sortBy = currentState.sortBy
                     )
-                    _pendingRequests.value = requests
+                    _pendingRequests.value = visibleRequests
                     _uiState.value = currentState.copy(
                         isLoading = false,
-                        hasPendingRequests = requests.isNotEmpty(),
+                        hasPendingRequests = visibleRequests.isNotEmpty(),
                         filteredRequests = filtered,
                         errorMessage = null
                     )
-                    updateMapMarkers(requests)
+                    updateMapMarkers(visibleRequests)
                 }
         }
     }

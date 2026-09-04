@@ -73,6 +73,7 @@ sealed class Screen(val route: String) {
     }
 
     // Shared
+    object PriceBoard : Screen("price_board")
     object Settings : Screen("settings")
     object HelpSupport : Screen("help_support")
     object About : Screen("about")
@@ -339,6 +340,7 @@ fun SampahJujurNavGraph(
                         "my_requests" -> navController.navigate(Screen.HouseholdMyRequests.route)
                         "household_profile" -> navController.navigate(Screen.HouseholdProfile.route)
                         "location_picker" -> navController.navigate(Screen.HouseholdLocationPicker.route)
+                        "price_board" -> navController.navigate(Screen.PriceBoard.route)
                     }
                 }
             )
@@ -521,6 +523,7 @@ fun SampahJujurNavGraph(
                         Screen.CollectorDashboard.route -> { /* Already here */ }
                         Screen.CollectorMap.route -> navController.navigate(Screen.CollectorMap.route)
                         Screen.CollectorProfile.route -> navController.navigate(Screen.CollectorProfile.route)
+                        "price_board" -> navController.navigate(Screen.PriceBoard.route)
                     }
                 }
             )
@@ -736,6 +739,15 @@ fun SampahJujurNavGraph(
             com.melodi.sampahjujur.ui.screens.chat.ChatScreen(
                 requestId = requestId,
                 onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        // Price Board Screen
+        composable(Screen.PriceBoard.route) {
+            com.melodi.sampahjujur.ui.screens.shared.PriceBoardScreen(
+                onBackClick = {
                     navController.popBackStack()
                 }
             )

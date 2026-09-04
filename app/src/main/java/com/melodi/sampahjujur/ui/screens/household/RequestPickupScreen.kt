@@ -247,12 +247,22 @@ fun RequestPickupScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp
                             )
-                            IconButton(onClick = { showAddItemDialog = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "Add",
-                                    tint = PrimaryGreen
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { onNavigate("price_board") }) {
+                                    Text(
+                                        text = androidx.compose.ui.res.stringResource(com.melodi.sampahjujur.R.string.view_prices),
+                                        color = PrimaryGreen,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                IconButton(onClick = { showAddItemDialog = true }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add",
+                                        tint = PrimaryGreen
+                                    )
+                                }
                             }
                         }
 
@@ -311,7 +321,7 @@ fun RequestPickupScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "Est. Value: Rp ${String.format("%,.0f", wasteItems.sumOf { it.estimatedValue })}",
+                                    text = "Est. Value: ₹${String.format("%,.0f", wasteItems.sumOf { it.estimatedValue })}",
                                     fontWeight = FontWeight.Bold,
                                     color = PrimaryGreen
                                 )
@@ -584,7 +594,7 @@ fun WasteItemCard(
                     color = Color.Gray
                 )
                 Text(
-                    text = "Value: Rp ${String.format("%,.0f", item.estimatedValue)}",
+                    text = "Value: ₹${String.format("%,.0f", item.estimatedValue)}",
                     fontSize = 12.sp,
                     color = PrimaryGreen
                 )

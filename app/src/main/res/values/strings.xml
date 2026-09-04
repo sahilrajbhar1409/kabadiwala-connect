@@ -33,4 +33,22 @@
     <string name="no_accepted_requests">No Accepted Requests</string>
     <string name="check_back_later">Check back later for new pickup requests</string>
     <string name="accept_requests_message">Accept requests from the pending tab to see them here</string>
+
+    <!-- Person 3 E-Waste & Price Module Strings -->
+    <string name="select_material">Select Material</string>
+    <string name="take_photo">Take Photo</string>
+    <string name="weight_kg">Weight (kg)</string>
+    <string name="current_price">Current Price</string>
+    <string name="estimated_value">Estimated Value</string>
+    <string name="price_history">Price History</string>
+    <string name="price_trend">Price Trend</string>
+    <string name="increasing">Increasing ↑</string>
+    <string name="decreasing">Decreasing ↓</string>
+    <string name="stable">Stable →</string>
+    <string name="view_prices">View Prices</string>
+    <string name="speak_price">Speak Price</string>
+    <string name="price_board">E-Waste Price Board</string>
+    <string name="invalid_weight">Please enter a valid weight greater than 0</string>
+    <string name="market_range">Market Range</string>
+    <string name="recycler_offer">Recycler Offer</string>
 </resources>

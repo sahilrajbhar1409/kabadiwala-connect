@@ -8,7 +8,9 @@ import com.melodi.sampahjujur.data.local.dao.PickupRequestDao
 import com.melodi.sampahjujur.data.local.dao.TransactionDao
 import com.melodi.sampahjujur.data.local.dao.UserDao
 import com.melodi.sampahjujur.data.local.dao.WasteItemDao
+import com.melodi.sampahjujur.data.local.dao.PriceDao
 import com.melodi.sampahjujur.data.local.entity.PickupRequestEntity
+import com.melodi.sampahjujur.data.local.entity.PriceEntity
 import com.melodi.sampahjujur.data.local.entity.TransactionEntity
 import com.melodi.sampahjujur.data.local.entity.UserEntity
 import com.melodi.sampahjujur.data.local.entity.WasteItemEntity
@@ -20,18 +22,20 @@ import com.melodi.sampahjujur.data.local.entity.WasteItemEntity
  * - User profiles (faster startup)
  * - Transaction history (offline viewing, complex queries)
  * - Pickup requests (offline submission)
+ * - Material prices and history (offline viewing)
  *
- * Database version: 2
- * Entities: WasteItemEntity, UserEntity, TransactionEntity, PickupRequestEntity
+ * Database version: 4
+ * Entities: WasteItemEntity, UserEntity, TransactionEntity, PickupRequestEntity, PriceEntity
  */
 @Database(
     entities = [
         WasteItemEntity::class,
         UserEntity::class,
         TransactionEntity::class,
-        PickupRequestEntity::class
+        PickupRequestEntity::class,
+        PriceEntity::class
     ],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(TransactionConverters::class)
@@ -56,6 +60,11 @@ abstract class SampahJujurDatabase : RoomDatabase() {
      * Provides access to PickupRequest operations
      */
     abstract fun pickupRequestDao(): PickupRequestDao
+
+    /**
+     * Provides access to Price board and history operations
+     */
+    abstract fun priceDao(): PriceDao
 
     companion object {
         /**

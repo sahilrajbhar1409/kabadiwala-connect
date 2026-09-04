@@ -6,6 +6,7 @@ import com.melodi.sampahjujur.model.Transaction
 import com.melodi.sampahjujur.model.TransactionItem
 import com.melodi.sampahjujur.model.User
 import com.melodi.sampahjujur.model.WasteItem
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -24,6 +25,12 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+import com.melodi.sampahjujur.data.local.dao.PriceDao
+import com.melodi.sampahjujur.data.local.entity.PriceEntity
+import com.melodi.sampahjujur.model.PriceHistoryRecord
+import com.melodi.sampahjujur.model.PriceInfo
+import com.melodi.sampahjujur.utils.WastePriceCalculator
+
 /**
  * Repository class for handling all interactions with the Firestore pickup_requests collection.
  * Manages pickup request lifecycle from creation to completion.
@@ -37,6 +44,7 @@ class WasteRepository @Inject constructor(
     private val notificationRepository: NotificationRepository,
     private val wasteItemDao: WasteItemDao,
     private val pickupRequestDao: PickupRequestDao,
+    private val priceDao: PriceDao,
     private val syncManager: SyncManager
 ) {
 
@@ -319,6 +327,39 @@ class WasteRepository @Inject constructor(
             // Notify household that request was accepted
             notificationRepository.notifyStatusChange(requestId, PickupRequest.STATUS_ACCEPTED)
 
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Lets a collector decline a pending request without cancelling it for others.
+     * The request stays pending and is hidden from this collector's available list.
+     */
+    suspend fun declinePickupRequest(requestId: String, collectorId: String): Result<Unit> {
+        return try {
+            firestore.runTransaction { transaction ->
+                val requestRef = firestore.collection(PICKUP_REQUESTS_COLLECTION).document(requestId)
+                val snapshot = transaction.get(requestRef)
+
+                if (!snapshot.exists()) {
+                    throw IllegalStateException("Request no longer exists")
+                }
+
+                val status = snapshot.getString("status")
+                if (status != PickupRequest.STATUS_PENDING) {
+                    throw IllegalStateException("Only pending requests can be declined")
+                }
+
+                transaction.update(
+                    requestRef,
+                    mapOf(
+                        "declinedBy" to FieldValue.arrayUnion(collectorId),
+                        "updatedAt" to System.currentTimeMillis()
+                    )
+                )
+            }.await()
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -824,4 +865,61 @@ class WasteRepository @Inject constructor(
         set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 
+    /**
+     * Seeds initial price board and history cache in Room for offline access
+     */
+    suspend fun seedPriceCacheIfNeeded() {
+        try {
+            val existing = priceDao.getAllCurrentPricesDirect()
+            if (existing.isEmpty()) {
+                val categories = WastePriceCalculator.getWasteTypes()
+                val currentEntities = mutableListOf<PriceEntity>()
+                val historyEntities = mutableListOf<PriceEntity>()
+
+                categories.forEach { category ->
+                    val info = WastePriceCalculator.getPriceInfo(category)
+                    currentEntities.add(PriceEntity.fromPriceInfo(info))
+
+                    val history = WastePriceCalculator.getMockPriceHistory(category)
+                    history.forEach { record ->
+                        historyEntities.add(PriceEntity.fromPriceHistoryRecord(record))
+                    }
+                }
+
+                priceDao.insertPrices(currentEntities + historyEntities)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("WasteRepository", "Failed to seed price cache: ${e.message}")
+        }
+    }
+
+    /**
+     * Gets real-time price board list for all e-waste categories (offline-first from Room)
+     */
+    fun getPriceBoard(): Flow<List<PriceInfo>> {
+        return priceDao.getAllCurrentPrices()
+            .map { entities ->
+                if (entities.isEmpty()) {
+                    // Fallback to calculator if Room not yet populated
+                    WastePriceCalculator.getWasteTypes().map { WastePriceCalculator.getPriceInfo(it) }
+                } else {
+                    entities.map { it.toPriceInfo() }
+                }
+            }
+    }
+
+    /**
+     * Gets price history records for a specific material category (offline-first from Room)
+     */
+    fun getPriceHistory(material: String): Flow<List<PriceHistoryRecord>> {
+        val normalized = WastePriceCalculator.normalizeType(material)
+        return priceDao.getPriceHistoryForMaterial(WastePriceCalculator.getDisplayName(normalized))
+            .map { entities ->
+                if (entities.isEmpty()) {
+                    WastePriceCalculator.getMockPriceHistory(normalized)
+                } else {
+                    entities.map { it.toPriceHistoryRecord() }
+                }
+            }
+    }
 }

@@ -87,6 +87,15 @@ fun CollectorDashboardScreen(
                         fontWeight = FontWeight.Bold
                     )
                 },
+                actions = {
+                    IconButton(onClick = { onNavigate("price_board") }) {
+                        Icon(
+                            imageVector = Icons.Default.TrendingUp,
+                            contentDescription = "Price Board",
+                            tint = PrimaryGreen
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = Color.White
                 )
@@ -649,7 +658,7 @@ fun CollectorRequestCard(
                         color = Color.Gray
                     )
                     Text(
-                        text = "Rp ${String.format("%,.0f", request.wasteItems.sumOf { it.estimatedValue })}",
+                        text = "₹${String.format("%,.0f", request.wasteItems.sumOf { it.estimatedValue })}",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryGreen

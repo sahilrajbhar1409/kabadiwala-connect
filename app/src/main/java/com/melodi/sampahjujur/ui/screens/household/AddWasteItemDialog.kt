@@ -3,36 +3,36 @@ package com.melodi.sampahjujur.ui.screens.household
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.melodi.sampahjujur.R
 import com.melodi.sampahjujur.ui.components.ImagePicker
 import com.melodi.sampahjujur.ui.theme.PrimaryGreen
 import com.melodi.sampahjujur.ui.theme.SampahJujurTheme
 import com.melodi.sampahjujur.utils.CloudinaryUploadService
+import com.melodi.sampahjujur.utils.TtsManager
 import com.melodi.sampahjujur.utils.WastePriceCalculator
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import java.util.UUID
 
-/**
- * Helper function to cache image URI in SharedPreferences for retry
- */
 private fun cacheImageUri(context: Context, tempId: String, imageUri: Uri) {
     val sharedPrefs = context.getSharedPreferences("image_cache", Context.MODE_PRIVATE)
     sharedPrefs.edit().putString("image_$tempId", imageUri.toString()).apply()
@@ -49,10 +49,12 @@ fun AddWasteItemDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    // Create sheet state that skips partially expanded state to prevent collapsing
-    val sheetState = rememberModalBottomSheetState(
-        skipPartiallyExpanded = true
-    )
+    val ttsManager = remember { TtsManager(context) }
+    DisposableEffect(Unit) {
+        onDispose { ttsManager.shutdown() }
+    }
+
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var selectedType by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
@@ -64,7 +66,6 @@ fun AddWasteItemDialog(
 
     val wasteTypes = WastePriceCalculator.getWasteTypes()
 
-    // Initialize Cloudinary on first composition
     LaunchedEffect(Unit) {
         try {
             CloudinaryUploadService.initialize(context)
@@ -73,7 +74,6 @@ fun AddWasteItemDialog(
         }
     }
 
-    // Auto-calculate estimated value using derivedStateOf to prevent modal reset
     val calculatedValue by remember {
         derivedStateOf {
             val weightValue = weight.toDoubleOrNull() ?: 0.0
@@ -85,12 +85,18 @@ fun AddWasteItemDialog(
         }
     }
 
+    val isWeightValid by remember {
+        derivedStateOf {
+            val w = weight.toDoubleOrNull()
+            w != null && w > 0.0
+        }
+    }
+
     val isFormValid by remember {
         derivedStateOf {
             selectedType.isNotBlank() &&
             weight.isNotBlank() &&
-            weight.toDoubleOrNull() != null &&
-            weight.toDouble() > 0 &&
+            isWeightValid &&
             imageUri != null &&
             !isUploading &&
             !isLoading
@@ -113,17 +119,15 @@ fun AddWasteItemDialog(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Add Waste Item",
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold
-                ),
+                text = stringResource(R.string.add_waste_item),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.Black
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Provide details about the waste item",
+                text = "Select e-waste category, photo & approximate weight",
                 fontSize = 14.sp,
                 color = Color.Gray
             )
@@ -161,7 +165,7 @@ fun AddWasteItemDialog(
                     value = selectedType,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Waste Type *") },
+                    label = { Text(stringResource(R.string.select_material) + " *") },
                     trailingIcon = {
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
@@ -187,7 +191,7 @@ fun AddWasteItemDialog(
                 ) {
                     wasteTypes.forEach { type ->
                         DropdownMenuItem(
-                            text = { Text(type) },
+                            text = { Text("$type (₹${WastePriceCalculator.getPricePerKg(type).toInt()}/kg)") },
                             onClick = {
                                 selectedType = type
                                 showTypeDropdown = false
@@ -199,11 +203,11 @@ fun AddWasteItemDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Weight Field
+            // Weight Field (Decimals supported, rejected <= 0)
             OutlinedTextField(
                 value = weight,
                 onValueChange = { weight = it },
-                label = { Text("Weight (kg) *") },
+                label = { Text(stringResource(R.string.weight_kg) + " *") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -214,9 +218,9 @@ fun AddWasteItemDialog(
                 ),
                 shape = RoundedCornerShape(12.dp),
                 supportingText = {
-                    if (weight.isNotBlank() && (weight.toDoubleOrNull() == null || weight.toDouble() <= 0)) {
+                    if (weight.isNotBlank() && !isWeightValid) {
                         Text(
-                            text = "Please enter a valid weight greater than 0",
+                            text = stringResource(R.string.invalid_weight),
                             color = MaterialTheme.colorScheme.error
                         )
                     }
@@ -225,8 +229,9 @@ fun AddWasteItemDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Estimated Value Display (Auto-calculated)
-            if (calculatedValue > 0) {
+            // Estimated Value Display (Calculated deterministically)
+            if (selectedType.isNotBlank()) {
+                val rate = WastePriceCalculator.getPricePerKg(selectedType)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -241,31 +246,52 @@ fun AddWasteItemDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Estimated Market Value",
+                                text = stringResource(R.string.estimated_value),
                                 fontSize = 12.sp,
                                 color = Color.Gray,
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "Based on Rp ${String.format("%,.0f", WastePriceCalculator.getPricePerKg(selectedType))}/kg",
-                                fontSize = 10.sp,
+                                text = "${stringResource(R.string.current_price)}: ₹${rate.toInt()}/kg",
+                                fontSize = 11.sp,
                                 color = Color.Gray
                             )
+                            if (calculatedValue > 0) {
+                                Text(
+                                    text = "${weight} kg × ₹${rate.toInt()} = ₹${calculatedValue.toInt()}",
+                                    fontSize = 10.sp,
+                                    color = PrimaryGreen
+                                )
+                            }
                         }
-                        Text(
-                            text = "Rp ${String.format("%,.0f", calculatedValue)}",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PrimaryGreen
-                        )
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "₹${calculatedValue.toInt()}",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PrimaryGreen
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    val w = weight.toDoubleOrNull() ?: 0.0
+                                    ttsManager.speakPrice(selectedType, rate, w, calculatedValue)
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VolumeUp,
+                                    contentDescription = stringResource(R.string.speak_price),
+                                    tint = PrimaryGreen
+                                )
+                            }
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.height(0.dp))
 
             // Description Field
             OutlinedTextField(
@@ -282,7 +308,7 @@ fun AddWasteItemDialog(
                     unfocusedContainerColor = Color.White
                 ),
                 shape = RoundedCornerShape(12.dp),
-                placeholder = { Text("e.g. Clean plastic bottles") }
+                placeholder = { Text("e.g. Intact circuit board or copper wire bundle") }
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -298,9 +324,7 @@ fun AddWasteItemDialog(
                         .weight(1f)
                         .height(56.dp),
                     shape = RoundedCornerShape(28.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = PrimaryGreen
-                    )
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryGreen)
                 ) {
                     Text(
                         text = "Cancel",
@@ -324,17 +348,12 @@ fun AddWasteItemDialog(
                                         )
                                         val weightValue = weight.toDoubleOrNull() ?: 0.0
                                         onAddItem(selectedType, weightValue, calculatedValue, description, uploadedUrl)
-                                    // Don't call onDismiss() here - let parent handle it after database save
                                     }
                                 } catch (e: TimeoutCancellationException) {
-                                    // Timeout - likely offline
-                                    // Generate temp ID and cache image URI for retry
                                     val tempId = UUID.randomUUID().toString()
                                     cacheImageUri(context, tempId, imageUri!!)
-
-                                    Log.w("AddWasteItemDialog", "Upload timeout - saving offline with tempId: $tempId")
+                                    Log.w("AddWasteItemDialog", "Upload timeout - saving offline: $tempId")
                                     val weightValue = weight.toDoubleOrNull() ?: 0.0
-                                    // Save with special format: "pending_upload:tempId"
                                     onAddItem(selectedType, weightValue, calculatedValue, description, "pending_upload:$tempId")
                                     uploadError = "Saved offline - image will upload when online"
                                     isUploading = false
@@ -348,9 +367,7 @@ fun AddWasteItemDialog(
                     modifier = Modifier
                         .weight(1f)
                         .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = PrimaryGreen
-                    ),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryGreen),
                     shape = RoundedCornerShape(28.dp),
                     enabled = isFormValid
                 ) {
@@ -361,7 +378,7 @@ fun AddWasteItemDialog(
                         )
                     } else {
                         Text(
-                            text = "Add Item",
+                            text = stringResource(R.string.add_waste_item),
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
@@ -372,13 +389,5 @@ fun AddWasteItemDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
-    }
-}
-
-@Preview
-@Composable
-fun AddWasteItemDialogPreview() {
-    SampahJujurTheme {
-        AddWasteItemDialog()
     }
 }

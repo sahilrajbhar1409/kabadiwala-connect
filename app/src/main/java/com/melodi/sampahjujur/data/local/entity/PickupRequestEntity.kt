@@ -22,7 +22,9 @@ data class PickupRequestEntity(
     val totalValue: Double,
     val createdAt: Long,
     val updatedAt: Long,
-    val isSynced: Boolean
+    val isSynced: Boolean,
+    val preferredPickupAt: Long = 0L,
+    val declinedByJson: String = "[]"
 ) {
     companion object {
         /**
@@ -51,6 +53,9 @@ data class PickupRequestEntity(
                 put("address", request.pickupLocation.address)
             }
 
+            val declinedArray = JSONArray()
+            request.declinedBy.forEach { declinedArray.put(it) }
+
             return PickupRequestEntity(
                 id = request.id.ifEmpty { "local_${System.currentTimeMillis()}" },
                 householdId = request.householdId,
@@ -62,7 +67,9 @@ data class PickupRequestEntity(
                 totalValue = request.totalValue,
                 createdAt = request.createdAt,
                 updatedAt = request.updatedAt,
-                isSynced = false
+                isSynced = false,
+                preferredPickupAt = request.preferredPickupAt,
+                declinedByJson = declinedArray.toString()
             )
         }
     }
@@ -97,6 +104,12 @@ data class PickupRequestEntity(
             address = locationObject.optString("address", "")
         )
 
+        val declinedBy = mutableListOf<String>()
+        val declinedArray = JSONArray(declinedByJson.ifBlank { "[]" })
+        for (i in 0 until declinedArray.length()) {
+            declinedBy.add(declinedArray.optString(i))
+        }
+
         return PickupRequest(
             id = id,
             householdId = householdId,
@@ -107,7 +120,9 @@ data class PickupRequestEntity(
             status = status,
             totalValue = totalValue,
             createdAt = createdAt,
-            updatedAt = updatedAt
+            updatedAt = updatedAt,
+            preferredPickupAt = preferredPickupAt,
+            declinedBy = declinedBy
         )
     }
 }

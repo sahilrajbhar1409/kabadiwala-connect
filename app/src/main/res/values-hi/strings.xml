@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">सम्पाह भरपूर</string>
+
+    <string name="nav_request_pickup">पिकअप अनुरोध</string>
+    <string name="nav_collector_dashboard">कलेक्टर डैशबोर्ड</string>
+
+    <string name="title_request_pickup">पिकअप का अनुरोध करें</string>
+    <string name="pickup_location">पिकअप स्थान</string>
+    <string name="get_current_location">वर्तमान स्थान प्राप्त करें</string>
+    <string name="waste_items">कबाड़ सामग्री</string>
+    <string name="add_waste_item">कबाड़ सामग्री जोड़ें</string>
+    <string name="submit_pickup_request">अनुरोध जमा करें</string>
+    <string name="additional_notes_optional">अतिरिक्त नोट्स (वैकल्पिक)</string>
+
+    <string name="select_material">सामग्री चुनें</string>
+    <string name="take_photo">फोटो लें</string>
+    <string name="weight_kg">वजन (किग्रा)</string>
+    <string name="current_price">वर्तमान मूल्य</string>
+    <string name="estimated_value">अनुमानित मूल्य</string>
+    <string name="price_history">मूल्य इतिहास</string>
+    <string name="price_trend">मूल्य रुझान</string>
+    <string name="increasing">बढ़ रहा है ↑</string>
+    <string name="decreasing">घट रहा है ↓</string>
+    <string name="stable">स्थिर →</string>
+    <string name="view_prices">मूल्य देखें</string>
+    <string name="speak_price">मूल्य सुनें</string>
+    <string name="price_board">ई-कबाड़ दर बोर्ड</string>
+    <string name="invalid_weight">कृपया 0 से अधिक मान्य वजन दर्ज करें</string>
+    <string name="market_range">बाजार दायरा</string>
+    <string name="recycler_offer">रीसाइक्लर पेशकश</string>
+</resources>

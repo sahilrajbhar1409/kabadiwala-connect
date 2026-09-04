@@ -4,7 +4,7 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.GeoPoint
 
 /**
- * Data class representing a pickup request in the Sampah Jujur application.
+ * Data class representing a pickup request in Kabadiwala Connect.
  * Contains all information about a waste pickup request from creation to completion.
  *
  * @property id Unique identifier for the pickup request
@@ -28,7 +28,9 @@ data class PickupRequest(
     val status: String = STATUS_PENDING,
     val wasteItems: List<WasteItem> = emptyList(),
     val totalValue: Double = 0.0,
-    val notes: String = ""
+    val notes: String = "",
+    val preferredPickupAt: Long = 0L,
+    val declinedBy: List<String> = emptyList()
 ) {
     /**
      * Nested data class for location information

@@ -212,12 +212,14 @@ class HouseholdViewModel @Inject constructor(
      * @param location Geographic location for pickup
      * @param address Human-readable address
      * @param notes Additional notes or instructions
+     * @param preferredPickupAt Preferred pickup date/time in epoch millis
      */
     fun createPickupRequest(
         wasteItems: List<WasteItem>,
         location: GeoPoint,
         address: String,
-        notes: String = ""
+        notes: String = "",
+        preferredPickupAt: Long = 0L
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
@@ -277,7 +279,8 @@ class HouseholdViewModel @Inject constructor(
                 status = PickupRequest.STATUS_PENDING,
                 wasteItems = wasteItems,
                 totalValue = totalValue,
-                notes = notes
+                notes = notes,
+                preferredPickupAt = preferredPickupAt
             )
 
             val result = wasteRepository.postPickupRequest(pickupRequest)
