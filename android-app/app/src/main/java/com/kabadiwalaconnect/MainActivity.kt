@@ -1,5 +1,12 @@
 ﻿package com.kabadiwalaconnect
 
+
+import androidx.compose.runtime.LaunchedEffect
+import android.speech.tts.TextToSpeech
+import java.util.Locale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.res.stringResource
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +40,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavHostController
+
 
 private val Green = Color(0xFF197A45)
 private val GreenDark = Color(0xFF0E5A31)
@@ -106,6 +114,7 @@ fun KabadiwalaApp() {
         composable("profile") { ProfileScreen(navController) }
         composable("nearby") { NearbyScreen(navController) }
         composable("settings") { SettingsScreen(navController) }
+        composable("safety") { SafetyScreen(navController) }
     }
 }
 
@@ -1370,7 +1379,7 @@ fun SettingsScreen(nav: NavHostController) {
             ) {
                 notifications = it
             }
-
+SettingRow("Safety guidance", "Tips for handling e-waste") { nav.navigate("safety") }
             SettingRow("Language", "English")
             SettingRow("Privacy", "Manage your data")
             SettingRow("Help & support", "We're here to help")
@@ -1397,6 +1406,70 @@ fun SettingsScreen(nav: NavHostController) {
         }
     }
 }
+@Composable
+fun SafetyScreen(nav: NavHostController) {
+    val context = LocalContext.current
+
+    val title = stringResource(id = R.string.safety_title)
+    val tip1 = stringResource(id = R.string.safety_tip_1)
+    val tip2 = stringResource(id = R.string.safety_tip_2)
+
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var ttsReady by remember { mutableStateOf(false) }
+
+    DisposableEffect(context) {
+        val ttsEngine = TextToSpeech(context) { status ->
+            ttsReady = (status == TextToSpeech.SUCCESS)
+        }
+        tts = ttsEngine
+
+        onDispose {
+            ttsEngine.stop()
+            ttsEngine.shutdown()
+            tts = null
+            ttsReady = false
+        }
+    }
+
+    LaunchedEffect(ttsReady, tts) {
+        if (!ttsReady) return@LaunchedEffect
+
+        val deviceLang = Locale.getDefault().language
+        val locale = when (deviceLang) {
+            "hi" -> Locale("hi", "IN")
+            "mr" -> Locale("mr", "IN")
+            else -> Locale.ENGLISH
+        }
+        tts?.setLanguage(locale)
+    }
+
+    Scaffold(
+        containerColor = Cream,
+        topBar = { AppTopBar(nav, title) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                enabled = ttsReady,
+                onClick = {
+                    val message = "$title. $tip1 $tip2"
+                    tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "safety")
+                }
+            ) {
+                Text("🔊 Speak")
+            }
+
+            Text(tip1)
+            Text(tip2)
+        }
+    }
+}
+
 
 @Composable
 fun SettingToggle(
@@ -1424,10 +1497,15 @@ fun SettingToggle(
 }
 
 @Composable
-fun SettingRow(title: String, subtitle: String) {
+fun SettingRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit = {}
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(vertical = 17.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

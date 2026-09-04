@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Kabadiwala Connect</string>
+    <string name="safety_title">सुरक्षा सुझाव</string>
+<string name="safety_tip_1">तेज़ या गंदा कचरा संभालते समय दस्ताने पहनें।</string>
+<string name="safety_tip_2">बैटरियाँ और ई-कचरा कागज़/प्लास्टिक से अलग रखें।</string>
+</resources>
