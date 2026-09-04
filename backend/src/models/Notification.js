@@ -1,0 +1,31 @@
+const mongoose = require('mongoose');
+
+const notificationSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    type: {
+      type: String,
+      enum: [
+        'NEW_MATCH',
+        'NEW_OFFER',
+        'OFFER_ACCEPTED',
+        'OFFER_REJECTED',
+        'PICKUP_SCHEDULED',
+        'HANDOVER_VERIFIED',
+        'PAYMENT_RECEIVED',
+        'LOT_UPDATE',
+        'SYSTEM',
+      ],
+      default: 'SYSTEM',
+    },
+    relatedEntityId: { type: String, default: '' },
+    isRead: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+notificationSchema.index({ user: 1, createdAt: -1 });
+
+module.exports = mongoose.model('Notification', notificationSchema);

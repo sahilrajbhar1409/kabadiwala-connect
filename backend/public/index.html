@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kabadiwala Connect — Trace</title>
+  <style>
+    :root { --green: #00C853; --bg: #f5f5f5; --text: #212121; }
+    body { font-family: Segoe UI, sans-serif; background: var(--bg); color: var(--text); margin: 0; }
+    header { background: var(--green); color: white; padding: 16px 24px; }
+    main { max-width: 720px; margin: 24px auto; background: white; padding: 24px; border-radius: 16px; }
+    input, button { font-size: 16px; padding: 10px 12px; }
+    button { background: var(--green); border: 0; color: white; border-radius: 8px; cursor: pointer; }
+    .step { border-left: 3px solid var(--green); padding: 8px 12px; margin: 12px 0; }
+    .muted { color: #757575; font-size: 13px; }
+    .warn { background: #fff8e1; padding: 8px 12px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Kabadiwala Connect</h1>
+    <p>Traceability lookup (demo)</p>
+  </header>
+  <main>
+    <p class="warn">Demo data is labelled as DEMO and is not a government authorization record.</p>
+    <p>
+      <input id="ref" placeholder="KW-LOT-... or other reference" style="width:70%" />
+      <button id="go">Trace</button>
+    </p>
+    <p class="muted">Log in via the Android app or API, then paste a Bearer token to query the protected trace endpoint.</p>
+    <p><input id="token" placeholder="JWT token" style="width:100%" /></p>
+    <div id="out"></div>
+  </main>
+  <script>
+    document.getElementById('go').onclick = async () => {
+      const ref = document.getElementById('ref').value.trim();
+      const token = document.getElementById('token').value.trim();
+      const out = document.getElementById('out');
+      out.textContent = 'Loading...';
+      try {
+        const res = await fetch('/api/trace/' + encodeURIComponent(ref), {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+        out.innerHTML = json.data.timeline.map((s) =>
+          `<div class="step"><strong>${s.step}</strong> · ${s.reference}<div class="muted">${s.status} · ${s.detail}</div></div>`
+        ).join('');
+      } catch (e) {
+        out.textContent = e.message;
+      }
+    };
+  </script>
+</body>
+</html>
