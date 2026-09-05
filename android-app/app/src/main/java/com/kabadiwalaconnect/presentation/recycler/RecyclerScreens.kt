@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.kabadiwalaconnect.data.SessionState
+import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.model.PaymentMethod
@@ -527,6 +529,7 @@ fun RecyclerHistoryScreen(nav: NavHostController) {
 
 @Composable
 fun RecyclerProfileScreen(nav: NavHostController) {
+    val context = LocalContext.current
     Scaffold(
         containerColor = Cream,
         topBar = { AppTopBar(nav, "Recycler profile") },
@@ -548,9 +551,10 @@ fun RecyclerProfileScreen(nav: NavHostController) {
             Spacer(Modifier.height(28.dp))
             OutlinedButton(
                 onClick = {
-                    SessionState.signOut()
+                    FirebaseAuthRepository().signOut()
+                    SessionState.clearPersistedSession(context)
                     nav.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

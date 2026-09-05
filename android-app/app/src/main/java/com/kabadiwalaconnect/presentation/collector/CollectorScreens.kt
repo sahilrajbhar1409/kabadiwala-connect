@@ -56,7 +56,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.compose.ui.platform.LocalContext
 import com.kabadiwalaconnect.data.SessionState
+import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
 import com.kabadiwalaconnect.data.model.CollectionRequest
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
@@ -522,6 +524,7 @@ fun CollectorHistoryScreen(nav: NavHostController) {
 
 @Composable
 fun CollectorProfileScreen(nav: NavHostController) {
+    val context = LocalContext.current
     Scaffold(
         containerColor = Cream,
         topBar = { AppTopBar(nav, "Collector profile") },
@@ -543,9 +546,10 @@ fun CollectorProfileScreen(nav: NavHostController) {
             Spacer(Modifier.height(28.dp))
             OutlinedButton(
                 onClick = {
-                    SessionState.signOut()
+                    FirebaseAuthRepository().signOut()
+                    SessionState.clearPersistedSession(context)
                     nav.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
