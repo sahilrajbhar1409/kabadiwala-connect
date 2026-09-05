@@ -4,6 +4,7 @@ import com.kabadiwalaconnect.data.model.CollectionRequest
 import com.kabadiwalaconnect.data.model.CollectionRequestStatus
 import com.kabadiwalaconnect.data.model.HandoverRecord
 import com.kabadiwalaconnect.data.model.HandoverStatus
+import com.kabadiwalaconnect.data.model.AiPrediction
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.model.RecyclingRecord
@@ -16,6 +17,10 @@ import java.util.Locale
 import java.util.UUID
 
 interface CollectionRepository {
+    fun createAiPrediction(prediction: AiPrediction): AiPrediction
+    fun getAiPrediction(id: String): AiPrediction?
+    fun getAiPredictionForLot(lotId: String): AiPrediction?
+
     fun createCollectionRequest(request: CollectionRequest): CollectionRequest
 
     fun getCollectionRequests(): List<CollectionRequest>
@@ -147,6 +152,10 @@ interface CollectionRepository {
 
     fun createRecyclingRecord(record: RecyclingRecord): RecyclingRecord
     fun getRecyclingRecords(recyclerId: String): List<RecyclingRecord>
+    fun getRecyclingRecordForLot(lotId: String): RecyclingRecord? =
+        getLots().firstOrNull { it.lotId == lotId }?.let { lot ->
+            getRecyclingRecords(lot.recyclerId.orEmpty()).firstOrNull { it.lotId == lotId }
+        }
     fun recordRecycling(
         lotId: String,
         recyclerId: String,
@@ -159,6 +168,8 @@ interface CollectionRepository {
 
     fun createTransaction(transaction: Transaction): Transaction
     fun getRecyclerTransactions(recyclerId: String): List<Transaction>
+    fun getTransactionForLot(lotId: String): Transaction? =
+        getRecyclerTransactions("").firstOrNull { it.lotId == lotId }
     fun payRecycler(
         lotId: String,
         recyclerId: String,
@@ -174,12 +185,39 @@ interface CollectionRepository {
 }
 
 class InMemoryCollectionRepository : CollectionRepository {
+    private val aiPredictions = LinkedHashMap<String, AiPrediction>()
     private val collectionRequests = LinkedHashMap<String, CollectionRequest>()
     private val lots = LinkedHashMap<String, Lot>()
     private val handovers = LinkedHashMap<String, HandoverRecord>()
     private val recyclingRecords = LinkedHashMap<String, RecyclingRecord>()
     private val transactions = LinkedHashMap<String, Transaction>()
     private var lotSequence = 0
+    private var transactionSequence = 0
+
+    @Synchronized
+    override fun createAiPrediction(prediction: AiPrediction): AiPrediction {
+        require(!aiPredictions.containsKey(prediction.id)) {
+            "AI prediction already exists: ${prediction.id}"
+        }
+        require(prediction.predictedWeight.isFinite() && prediction.predictedWeight > 0) {
+            "AI predicted weight must be greater than zero."
+        }
+        require(prediction.predictedValue.isFinite() && prediction.predictedValue >= 0) {
+            "AI predicted value is invalid."
+        }
+        require(prediction.confidence in 0.0..1.0) {
+            "AI confidence must be between 0 and 1."
+        }
+        aiPredictions[prediction.id] = prediction
+        return prediction
+    }
+
+    @Synchronized
+    override fun getAiPrediction(id: String): AiPrediction? = aiPredictions[id]
+
+    @Synchronized
+    override fun getAiPredictionForLot(lotId: String): AiPrediction? =
+        lots[lotId]?.aiPredictionId?.let(aiPredictions::get)
 
     @Synchronized
     override fun createCollectionRequest(request: CollectionRequest): CollectionRequest {
@@ -465,6 +503,9 @@ class InMemoryCollectionRepository : CollectionRepository {
         require(!recyclingRecords.containsKey(record.id)) {
             "Recycling record already exists: ${record.id}"
         }
+        require(recyclingRecords.values.none { it.lotId == record.lotId }) {
+            "A recycling record already exists for this lot."
+        }
         require(record.processedWeight.isFinite() && record.processedWeight > 0) {
             "Processed weight must be greater than zero."
         }
@@ -475,6 +516,10 @@ class InMemoryCollectionRepository : CollectionRepository {
     @Synchronized
     override fun getRecyclingRecords(recyclerId: String): List<RecyclingRecord> =
         recyclingRecords.values.filter { it.recyclerId == recyclerId }.toList().asReversed()
+
+    @Synchronized
+    override fun getRecyclingRecordForLot(lotId: String): RecyclingRecord? =
+        recyclingRecords.values.firstOrNull { it.lotId == lotId }
 
     @Synchronized
     override fun recordRecycling(
@@ -490,16 +535,16 @@ class InMemoryCollectionRepository : CollectionRepository {
         require(processedWeight.isFinite() && processedWeight > 0) {
             "Processed weight must be greater than zero."
         }
-        require(actualMaterial.isNotBlank()) { "Actual material is required." }
+        require(actualMaterial.trim().isNotBlank()) { "Actual material is required." }
         val lot = lots[lotId] ?: error("Lot not found: $lotId")
         require(lot.recyclerId == recyclerId) { "This lot is assigned to another recycler." }
+        require(recyclingRecords.values.none { it.lotId == lotId }) {
+            "A recycling record already exists for this lot."
+        }
         require(lot.status == LotStatus.PAID) {
             "Payment must be completed before recycling is recorded."
         }
         val timestamp = now()
-        require(recyclingRecords.values.none { it.lotId == lotId }) {
-            "A recycling record already exists for this lot."
-        }
         val record = RecyclingRecord(
             id = "RECYCLE-${UUID.randomUUID()}",
             lotId = lotId,
@@ -526,16 +571,29 @@ class InMemoryCollectionRepository : CollectionRepository {
         require(!transactions.containsKey(transaction.id)) {
             "Transaction already exists: ${transaction.id}"
         }
+        require(transactions.values.none { it.lotId == transaction.lotId }) {
+            "A transaction already exists for this lot."
+        }
         require(transaction.amount.isFinite() && transaction.amount >= 0) {
             "Transaction amount is invalid."
         }
         transactions[transaction.id] = transaction
+        transaction.id.removePrefix("KC-TXN-").toIntOrNull()?.let {
+            transactionSequence = maxOf(transactionSequence, it)
+        }
         return transaction
     }
 
     @Synchronized
     override fun getRecyclerTransactions(recyclerId: String): List<Transaction> =
-        transactions.values.filter { it.payeeId == recyclerId }.toList().asReversed()
+        transactions.values
+            .filter { recyclerId.isBlank() || it.payeeId == recyclerId }
+            .toList()
+            .asReversed()
+
+    @Synchronized
+    override fun getTransactionForLot(lotId: String): Transaction? =
+        transactions.values.firstOrNull { it.lotId == lotId }
 
     @Synchronized
     override fun payRecycler(
@@ -546,12 +604,16 @@ class InMemoryCollectionRepository : CollectionRepository {
         require(recyclerId.isNotBlank()) { "Recycler id is required." }
         val lot = lots[lotId] ?: error("Lot not found: $lotId")
         require(lot.recyclerId == recyclerId) { "This lot is assigned to another recycler." }
+        require(transactions.values.none { it.lotId == lotId }) {
+            "Payment already recorded for this lot."
+        }
         require(lot.status == LotStatus.RECYCLER_CONFIRMED) {
             "Confirm receipt before paying for this lot."
         }
         val timestamp = now()
+        transactionSequence += 1
         val transaction = Transaction(
-            id = "KC-TXN-${UUID.randomUUID().toString().take(6).uppercase(Locale.US)}",
+            id = "KC-TXN-${transactionSequence.toString().padStart(6, '0')}",
             lotId = lotId,
             payerId = "platform",
             payeeId = recyclerId,

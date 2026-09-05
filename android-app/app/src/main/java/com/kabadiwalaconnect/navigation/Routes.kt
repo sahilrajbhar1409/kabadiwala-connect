@@ -10,6 +10,8 @@ object Routes {
     const val PICKUP_CONFIRMATION = "pickup-confirmation/{lotId}"
     const val TRACKING = "tracking"
     const val TRACKING_WITH_LOT = "tracking/{lotId}"
+    const val TRACEABILITY = "traceability"
+    const val TRACEABILITY_WITH_LOT = "traceability/{lotId}"
     const val HISTORY = "history"
     const val NEARBY = "nearby"
     const val PROFILE = "profile"
@@ -33,8 +35,10 @@ object Routes {
 
     fun pickupConfirmation(lotId: String): String = "pickup-confirmation/$lotId"
     fun tracking(lotId: String): String = "tracking/$lotId"
+    fun traceability(lotId: String): String = "traceability/$lotId"
     fun collectorActivePickup(lotId: String): String = "collector-active-pickup/$lotId"
     fun collectorHandover(lotId: String): String = "collector-handover/$lotId"
     fun recyclerLotDetails(lotId: String): String = "recycler-lot-details/$lotId"
     fun recyclerRecycling(lotId: String): String = "recycler-recycling/$lotId"
+    fun recyclerTraceability(lotId: String): String = "traceability/$lotId"
 }

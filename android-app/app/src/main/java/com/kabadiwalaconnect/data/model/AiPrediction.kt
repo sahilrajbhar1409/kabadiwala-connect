@@ -7,5 +7,7 @@ data class AiPrediction(
     val predictedValue: Double,
     val confidence: Double,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val imageReference: String = "demo-upload",
+    val modelVersion: String = "deterministic-demo-v1"
 )

@@ -221,7 +221,7 @@ fun CollectorRequestsScreen(nav: NavHostController) {
                                 )
                                 refresh++
                                 nav.navigate(Routes.collectorActivePickup(lot.lotId))
-                            } catch (exception: IllegalArgumentException) {
+                            } catch (exception: Exception) {
                                 errorMessage = exception.message ?: "Unable to accept this request."
                             }
                         },
@@ -229,7 +229,7 @@ fun CollectorRequestsScreen(nav: NavHostController) {
                             try {
                                 repository.rejectCollectionRequest(request.id)
                                 refresh++
-                            } catch (exception: IllegalArgumentException) {
+                            } catch (exception: Exception) {
                                 errorMessage = exception.message ?: "Unable to reject this request."
                             }
                         }
@@ -333,7 +333,7 @@ private fun ActivePickupCard(lot: Lot, nav: NavHostController, onChanged: () -> 
                         try {
                             repository.startPickup(lot.lotId, SessionState.COLLECTOR_ID)
                             onChanged()
-                        } catch (exception: IllegalArgumentException) {
+                        } catch (exception: Exception) {
                             errorMessage = exception.message ?: "Unable to start this pickup."
                         }
                     },
@@ -358,7 +358,7 @@ private fun ActivePickupCard(lot: Lot, nav: NavHostController, onChanged: () -> 
                                     weight!!
                                 )
                                 onChanged()
-                            } catch (exception: IllegalArgumentException) {
+                            } catch (exception: Exception) {
                                 errorMessage = exception.message ?: "Unable to record collection."
                             }
                         },
@@ -385,7 +385,7 @@ private fun ActivePickupCard(lot: Lot, nav: NavHostController, onChanged: () -> 
 fun CollectorHandoverScreen(nav: NavHostController, lotId: String?) {
     val repository = remember { CollectionRepositoryProvider.instance }
     val lot = lotId?.let { repository.getLot(it) }
-    var recycler by remember { mutableStateOf("") }
+    var recycler by remember { mutableStateOf(RECYCLER_ID) }
     var location by remember { mutableStateOf("") }
     var weightText by remember(lot?.lotId) { mutableStateOf(lot?.actualWeight?.toString() ?: "") }
     var valueText by remember(lot?.lotId) { mutableStateOf(lot?.actualValue?.toString() ?: "") }
@@ -427,7 +427,7 @@ fun CollectorHandoverScreen(nav: NavHostController, lotId: String?) {
                             nav.navigate(Routes.COLLECTOR_EARNINGS) {
                                 popUpTo(Routes.COLLECTOR_DASHBOARD)
                             }
-                        } catch (exception: IllegalArgumentException) {
+                        } catch (exception: Exception) {
                             error = exception.message ?: "Unable to save handover."
                         }
                     }

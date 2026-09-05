@@ -88,6 +88,18 @@ fun TrackingScreen(nav: NavHostController, lotId: String? = null) {
             item {
                 OutlinedButton(
                     onClick = {
+                        lot?.let { nav.navigate(Routes.traceability(it.lotId)) }
+                            ?: nav.navigate(Routes.TRACEABILITY)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("View traceability & EPR")
+                }
+            }
+            item {
+                OutlinedButton(
+                    onClick = {
                         nav.navigate(Routes.HISTORY) {
                             launchSingleTop = true
                         }

@@ -16,6 +16,7 @@ import com.kabadiwalaconnect.presentation.citizen.PickupConfirmationScreen
 import com.kabadiwalaconnect.presentation.citizen.ProfileScreen
 import com.kabadiwalaconnect.presentation.citizen.SettingsScreen
 import com.kabadiwalaconnect.presentation.citizen.TrackingScreen
+import com.kabadiwalaconnect.presentation.citizen.TraceabilityScreen
 import com.kabadiwalaconnect.presentation.collector.CollectorActivePickupScreen
 import com.kabadiwalaconnect.presentation.collector.CollectorDashboardScreen
 import com.kabadiwalaconnect.presentation.collector.CollectorEarningsScreen
@@ -52,6 +53,10 @@ fun AppNavigation() {
         composable(Routes.TRACKING) { TrackingScreen(navController) }
         composable(Routes.TRACKING_WITH_LOT) { entry ->
             TrackingScreen(navController, entry.arguments?.getString("lotId"))
+        }
+        composable(Routes.TRACEABILITY) { TraceabilityScreen(navController) }
+        composable(Routes.TRACEABILITY_WITH_LOT) { entry ->
+            TraceabilityScreen(navController, entry.arguments?.getString("lotId"))
         }
         composable(Routes.HISTORY) { HistoryScreen(navController) }
         composable(Routes.NEARBY) { NearbyScreen(navController) }

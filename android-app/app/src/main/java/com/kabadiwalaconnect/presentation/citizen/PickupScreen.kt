@@ -13,35 +13,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.navigation.NavHostController
-import com.kabadiwalaconnect.data.model.CollectionRequest
-import com.kabadiwalaconnect.data.model.CollectionRequestStatus
-import com.kabadiwalaconnect.data.model.Lot
-import com.kabadiwalaconnect.data.model.LotStatus
+import com.kabadiwalaconnect.data.model.AiPrediction
 import com.kabadiwalaconnect.data.model.Material
-import com.kabadiwalaconnect.data.repository.CollectionRepositoryProvider
 import com.kabadiwalaconnect.data.repository.PriceServiceProvider
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.AppTopBar
 import com.kabadiwalaconnect.ui.theme.*
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
-import java.util.UUID
-
-private const val CITIZEN_ID = "citizen-session"
 
 @Composable
 fun PickupScreen(nav: NavHostController) {
-    val repository = remember { CollectionRepositoryProvider.instance }
+    val viewModel = remember { PickupViewModel() }
     val priceService = remember { PriceServiceProvider.instance }
     val materials = remember { priceService.supportedMaterials() }
     var step by remember { mutableIntStateOf(0) }
     var selectedMaterial by remember { mutableStateOf<Material?>(null) }
     var weightText by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
+    var imageReference by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSubmitting by remember { mutableStateOf(false) }
+    val imagePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            imageReference = uri.toString()
+            val result = viewModel.analyzeUpload(uri.toString())
+            if (result != null) {
+                selectedMaterial = materials.firstOrNull { it.id == result.materialId }
+                weightText = "%.2f".format(Locale.US, result.predictedWeight)
+                errorMessage = null
+            } else {
+                errorMessage = viewModel.errorMessage
+            }
+        }
+    }
 
     val weight = weightText.toDoubleOrNull()
     val estimatedValue = if (selectedMaterial != null && weight != null && weight > 0) {
@@ -74,10 +83,31 @@ fun PickupScreen(nav: NavHostController) {
             }
 
             when (step) {
-                0 -> MaterialStep(materials, selectedMaterial) {
-                    selectedMaterial = it
-                    errorMessage = null
-                }
+                0 ->                 MaterialStep(
+                    materials = materials,
+                    selected = selectedMaterial,
+                    prediction = viewModel.prediction,
+                    imageReference = imageReference,
+                    onImageReferenceChange = { imageReference = it },
+                    onPickImage = { imagePicker.launch("image/*") },
+                    onAnalyze = {
+                        val result = viewModel.analyzeUpload(imageReference)
+                        if (result != null) {
+                            selectedMaterial = materials.firstOrNull { it.id == result.materialId }
+                            weightText = "%.2f".format(Locale.US, result.predictedWeight)
+                            errorMessage = null
+                        } else {
+                            errorMessage = viewModel.errorMessage
+                        }
+                    },
+                    onSelected = {
+                        if (viewModel.prediction?.materialId != it.id) {
+                            viewModel.clearPrediction()
+                        }
+                        selectedMaterial = it
+                        errorMessage = null
+                    }
+                )
                 1 -> WeightStep(weightText) {
                     weightText = it
                     errorMessage = null
@@ -109,41 +139,18 @@ fun PickupScreen(nav: NavHostController) {
                             isSubmitting = true
                             errorMessage = null
                             try {
-                                val now = now()
-                                val requestId = "REQ-${UUID.randomUUID()}"
-                                val lotId = repository.nextLotId()
-                                val request = CollectionRequest(
-                                    id = requestId,
-                                    citizenId = CITIZEN_ID,
+                                val result = viewModel.submit(
                                     materialId = selectedMaterial!!.id,
                                     estimatedWeight = weight!!,
                                     estimatedValue = estimatedValue,
-                                    pickupAddress = address.trim(),
-                                    latitude = 0.0,
-                                    longitude = 0.0,
-                                    preferredDate = now.substringBefore("T"),
-                                    preferredTime = "Any time",
-                                    status = CollectionRequestStatus.REQUESTED,
-                                    createdAt = now,
-                                    updatedAt = now
+                                    pickupAddress = address
                                 )
-                                repository.createCollectionRequest(request)
-                                repository.createLot(
-                                    Lot(
-                                        lotId = lotId,
-                                        requestId = requestId,
-                                        citizenId = CITIZEN_ID,
-                                        collectorId = "",
-                                        materialId = selectedMaterial!!.id,
-                                        estimatedWeight = weight,
-                                        estimatedValue = estimatedValue,
-                                        pickupLocation = address.trim(),
-                                        status = LotStatus.REQUESTED,
-                                        createdAt = now,
-                                        updatedAt = now
-                                    )
-                                )
-                                nav.navigate(Routes.pickupConfirmation(lotId)) {
+                                if (result == null) {
+                                    isSubmitting = false
+                                    errorMessage = viewModel.errorMessage
+                                    return@Button
+                                }
+                                nav.navigate(Routes.pickupConfirmation(result.lot.lotId)) {
                                     launchSingleTop = true
                                     popUpTo(Routes.PICKUP) { inclusive = true }
                                 }
@@ -174,9 +181,64 @@ fun PickupScreen(nav: NavHostController) {
 private fun MaterialStep(
     materials: List<Material>,
     selected: Material?,
+    prediction: AiPrediction?,
+    imageReference: String,
+    onImageReferenceChange: (String) -> Unit,
+    onPickImage: () -> Unit,
+    onAnalyze: () -> Unit,
     onSelected: (Material) -> Unit
 ) {
-    Text("What do you want to recycle?", style = MaterialTheme.typography.titleLarge)
+    Text("Identify your recyclables", style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Upload is represented by a deterministic demo reference. A real vision service can replace it later.",
+        color = TextMuted,
+        fontSize = 12.sp
+    )
+    Spacer(Modifier.height(10.dp))
+    OutlinedTextField(
+        value = imageReference,
+        onValueChange = onImageReferenceChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Photo reference (optional)") },
+        placeholder = { Text("e.g. metal-cables-photo") },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp)
+    )
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = onPickImage,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text("Choose photo")
+    }
+    Spacer(Modifier.height(8.dp))
+    OutlinedButton(
+        onClick = onAnalyze,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text("Analyze upload with demo AI")
+    }
+    prediction?.let {
+        Surface(shape = RoundedCornerShape(14.dp), color = GreenLight) {
+            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                Text("AI result ready", color = GreenDark, fontWeight = FontWeight.Bold)
+                Text(
+                    "Predicted %.2f kg · %.0f%% confidence".format(
+                        Locale.US,
+                        it.predictedWeight,
+                        it.confidence * 100
+                    ),
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(16.dp))
+    Text("Or choose material manually", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(14.dp))
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -261,6 +323,3 @@ private fun ReviewRow(label: String, value: String) {
         Text(value, fontWeight = FontWeight.SemiBold)
     }
 }
-
-private fun now(): String =
-    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(Date())

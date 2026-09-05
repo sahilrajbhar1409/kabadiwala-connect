@@ -13,7 +13,9 @@ data class CollectionRequest(
     val preferredTime: String,
     val status: CollectionRequestStatus,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val aiPredictionId: String? = null,
+    val imageReference: String? = null
 )
 
 enum class CollectionRequestStatus {

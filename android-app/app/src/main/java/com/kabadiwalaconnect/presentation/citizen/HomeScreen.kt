@@ -96,6 +96,9 @@ fun HomeScreen(nav: NavHostController) {
                     QuickAction(
                         "📋", "My history", "View activity", Modifier.width(155.dp)
                     ) { nav.navigate(Routes.HISTORY) }
+                    QuickAction(
+                        "🔗", "Traceability", "View EPR trail", Modifier.width(155.dp)
+                    ) { nav.navigate(Routes.TRACEABILITY) }
                 }
             }
             item {
@@ -110,6 +113,15 @@ fun HomeScreen(nav: NavHostController) {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { nav.navigate(Routes.TRACKING) }
                     )
+                }
+            }
+            item {
+                OutlinedButton(
+                    onClick = { nav.navigate(Routes.TRACEABILITY) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("View traceability & EPR record")
                 }
             }
             item {

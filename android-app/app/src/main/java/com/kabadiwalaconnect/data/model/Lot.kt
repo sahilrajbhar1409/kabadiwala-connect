@@ -17,7 +17,9 @@ data class Lot(
     val handoverTimestamp: String? = null,
     val status: LotStatus,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val aiPredictionId: String? = null,
+    val imageReference: String? = null
 )
 
 enum class LotStatus {

@@ -261,7 +261,7 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                                         }
                                         lot = repository.confirmRecyclerReceipt(current.lotId, recyclerId)
                                         error = null
-                                    } catch (exception: IllegalArgumentException) {
+                                    } catch (exception: Exception) {
                                         error = exception.message ?: "Unable to confirm this lot."
                                     }
                                 },
@@ -288,7 +288,7 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                                         repository.payRecycler(current.lotId, recyclerId, paymentMethod)
                                         lot = repository.getLot(current.lotId)
                                         error = null
-                                    } catch (exception: IllegalArgumentException) {
+                                    } catch (exception: Exception) {
                                         error = exception.message ?: "Unable to complete payment."
                                     }
                                 },
@@ -306,6 +306,15 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                         current.status == LotStatus.RECYCLED ->
                             Text("Recycling completed. This Lot ID remains traceable in history.", color = Green)
                         else -> Text("Lot is not ready for recycler processing.", color = TextMuted)
+                    }
+                }
+                item {
+                    OutlinedButton(
+                        onClick = { nav.navigate(Routes.recyclerTraceability(current.lotId)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("View traceability & EPR")
                     }
                 }
             }
@@ -426,7 +435,7 @@ fun RecyclerRecyclingScreen(nav: NavHostController, lotId: String?) {
                             nav.navigate(Routes.RECYCLER_HISTORY) {
                                 popUpTo(Routes.RECYCLER_DASHBOARD)
                             }
-                        } catch (exception: IllegalArgumentException) {
+                        } catch (exception: Exception) {
                             error = exception.message ?: "Unable to record recycling."
                         }
                     }
