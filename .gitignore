@@ -159,3 +159,8 @@ AGENTS.md
 android-app/.idea/
 android-app/local.properties
 android-app/app/google-services.json
+
+# Admin panel local files and build output
+admin-panel/node_modules/
+admin-panel/dist/
+admin-panel/.env

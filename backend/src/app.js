@@ -17,6 +17,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const traceRoutes = require('./routes/traceRoutes');
+const adminAnalyticsRoutes = require('./routes/adminAnalyticsRoutes');
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.use('/api/handovers', handoverRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin/analytics', adminAnalyticsRoutes);
 app.use('/api', traceRoutes);
 
 app.use(notFound);
