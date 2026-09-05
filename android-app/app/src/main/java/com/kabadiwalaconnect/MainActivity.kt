@@ -1,4 +1,4 @@
-﻿package com.kabadiwalaconnect
+package com.kabadiwalaconnect
 
 
 import androidx.compose.runtime.LaunchedEffect
@@ -10,17 +10,29 @@ import androidx.compose.ui.res.stringResource
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import com.kabadiwalaconnect.navigation.AppNavigation
+import com.kabadiwalaconnect.ui.theme.KabadiwalaConnectTheme 
+main
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+Here is the fully resolved code with all the merge conflicts removed. I have kept the complete implementation from your `person6-safety-tts` branch (which includes all the screens and logic), added the necessary imports, and ensured all brackets are properly closed (including the missing closing braces for the `BottomBar` at the end).
+
+```kotlin
+package com.example.kabadiwala
+
+import android.os.Bundle
+import android.speech.tts.TextToSpeech
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,25 +43,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.LocalTextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.NavHostController
-
-
-private val Green = Color(0xFF197A45)
-private val GreenDark = Color(0xFF0E5A31)
-private val GreenLight = Color(0xFFE8F5EC)
-private val Cream = Color(0xFFF8FAF7)
-private val TextDark = Color(0xFF17231B)
-private val TextMuted = Color(0xFF68736B)
-private val Border = Color(0xFFE0E6E1)
-private val Orange = Color(0xFFE9892F)
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1379,7 +1384,8 @@ fun SettingsScreen(nav: NavHostController) {
             ) {
                 notifications = it
             }
-SettingRow("Safety guidance", "Tips for handling e-waste") { nav.navigate("safety") }
+            
+            SettingRow("Safety guidance", "Tips for handling e-waste") { nav.navigate("safety") }
             SettingRow("Language", "English")
             SettingRow("Privacy", "Manage your data")
             SettingRow("Help & support", "We're here to help")
@@ -1406,6 +1412,7 @@ SettingRow("Safety guidance", "Tips for handling e-waste") { nav.navigate("safet
         }
     }
 }
+
 @Composable
 fun SafetyScreen(nav: NavHostController) {
     val context = LocalContext.current
@@ -1469,7 +1476,6 @@ fun SafetyScreen(nav: NavHostController) {
         }
     }
 }
-
 
 @Composable
 fun SettingToggle(
@@ -1586,5 +1592,8 @@ fun BottomBar(
             icon = { Icon(Icons.Default.Person, null) },
             label = { Text("Profile") }
         )
+    }
+}
+``` main
     }
 }
