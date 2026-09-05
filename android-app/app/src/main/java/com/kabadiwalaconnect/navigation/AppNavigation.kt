@@ -1,5 +1,6 @@
 package com.kabadiwalaconnect.navigation
 
+import com.kabadiwalaconnect.presentation.citizen.SafetyScreen
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -89,5 +90,6 @@ fun AppNavigation() {
         composable(Routes.RECYCLER_PAYMENTS) { RecyclerPaymentsScreen(navController) }
         composable(Routes.RECYCLER_HISTORY) { RecyclerHistoryScreen(navController) }
         composable(Routes.RECYCLER_PROFILE) { RecyclerProfileScreen(navController) }
+        composable(Routes.SAFETY) { SafetyScreen(navController) }
     }
 }

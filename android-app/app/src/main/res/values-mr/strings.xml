@@ -1,0 +1,6 @@
+<resources>
+ <string name="app_name">Kabadiwala Connect</string>
+ <string name="safety_title">सुरक्षा टिप्स</string>
+<string name="safety_tip_1">तीक्ष्ण किंवा घाण कचरा हाताळताना हातमोजे घाला.</string>
+<string name="safety_tip_2">बॅटऱ्या आणि ई-कचरा कागद/प्लास्टिकपासून वेगळा ठेवा.</string>
+</resources>

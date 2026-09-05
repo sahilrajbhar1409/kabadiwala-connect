@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Kabadiwala Connect</string>
+<string name="safety_title">Safety tips</string>
+<string name="safety_tip_1">Wear gloves while handling sharp or dirty waste.</string>
+<string name="safety_tip_2">Keep batteries and e-waste separate from paper/plastic.</string>
 </resources>
