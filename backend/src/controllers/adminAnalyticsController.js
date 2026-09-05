@@ -203,8 +203,19 @@ exports.getSummary = async (req, res, next) => {
       {
         $group: {
           _id: null,
-          totalCompletedTransactions: { $sum: 1 },
-          totalAmount: { $sum: { $ifNull: ['$finalAmount', '$agreedAmount'] } }
+          totalCompletedTransactions: { $sum: 1 }
+        }
+      }
+    ];
+
+    // Financial amounts: Payment records with paymentStatus: 'PAID'
+    const paymentMatch = { ...matchStage.$match, paymentStatus: 'PAID' };
+    const paymentPipeline = [
+      { $match: paymentMatch },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$amount' }
         }
       }
     ];
@@ -220,14 +231,16 @@ exports.getSummary = async (req, res, next) => {
       }
     ];
 
-    const [handoverRes, txRes, userRes] = await Promise.all([
+    const [handoverRes, txRes, paymentRes, userRes] = await Promise.all([
       Handover.aggregate(handoverPipeline),
       Transaction.aggregate(txPipeline),
+      Payment.aggregate(paymentPipeline),
       User.aggregate(usersPipeline)
     ]);
 
     const hResult = handoverRes[0] || { totalWeightKg: 0, verifiedHandovers: 0 };
-    const tResult = txRes[0] || { totalCompletedTransactions: 0, totalAmount: 0 };
+    const tResult = txRes[0] || { totalCompletedTransactions: 0 };
+    const pResult = paymentRes[0] || { totalAmount: 0 };
     let activeCollectors = 0;
     let activeRecyclers = 0;
     userRes.forEach(u => {
@@ -238,7 +251,7 @@ exports.getSummary = async (req, res, next) => {
     res.json(formatResponse({
       totalWeightKg: hResult.totalWeightKg,
       totalCompletedTransactions: tResult.totalCompletedTransactions,
-      totalAmount: tResult.totalAmount,
+      totalAmount: pResult.totalAmount,
       activeCollectors,
       activeRecyclers
     }, meta));
@@ -616,24 +629,39 @@ exports.getEpr = async (req, res, next) => {
       },
       { $unwind: '$lotDoc' },
       {
-        $group: {
-          _id: '$lotDoc.materialCategory',
-          weightKg: { $sum: '$weight' },
+        $facet: {
+          categories: [
+            {
+              $group: {
+                _id: '$lotDoc.materialCategory',
+                weightKg: { $sum: '$weight' },
+              }
+            },
+            {
+              $project: {
+                _id: 0,
+                category: '$_id',
+                weightKg: 1,
+                co2SavedKg: { $literal: null }
+              }
+            }
+          ],
+          total: [
+            {
+              $group: {
+                _id: null,
+                totalDivertedKg: { $sum: '$weight' }
+              }
+            }
+          ]
         }
-      },
-      {
-          $project: {
-              _id: 0,
-              category: '$_id',
-              weightKg: 1,
-              co2SavedKg: { $literal: null }
-          }
       }
     ];
 
-    const categoryEpr = await Handover.aggregate(pipeline);
+    const aggrResult = await Handover.aggregate(pipeline);
 
-    const totalDivertedKg = categoryEpr.reduce((sum, c) => sum + c.weightKg, 0);
+    const categoryEpr = aggrResult[0]?.categories || [];
+    const totalDivertedKg = aggrResult[0]?.total[0]?.totalDivertedKg || 0;
 
     const recyclerMatch = { ...buildMatchStage(meta.fromDate, meta.toDate, meta.includeDemo).$match, isVerified: true };
     const verifiedRecyclers = await RecyclerProfile.countDocuments(recyclerMatch);
