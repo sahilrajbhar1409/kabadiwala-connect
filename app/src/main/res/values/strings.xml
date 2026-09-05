@@ -1,0 +1,58 @@
+<resources>
+    <string name="app_name">Sampah Jujur</string>
+
+    <!-- Navigation -->
+    <string name="nav_request_pickup">Request Pickup</string>
+    <string name="nav_collector_dashboard">Collector Dashboard</string>
+
+    <!-- Request Pickup Fragment -->
+    <string name="title_request_pickup">Request Pickup</string>
+    <string name="pickup_location">Pickup Location</string>
+    <string name="get_current_location">Get Current Location</string>
+    <string name="waste_items">Waste Items</string>
+    <string name="add_waste_item">Add Waste Item</string>
+    <string name="submit_pickup_request">Submit Pickup Request</string>
+    <string name="additional_notes_optional">Additional notes (optional)</string>
+
+    <!-- Collector Dashboard Fragment -->
+    <string name="title_collector_dashboard">Collector Dashboard</string>
+    <string name="search_by_address_or_waste_type">Search by address or waste type...</string>
+    <string name="pending_requests">Pending Requests</string>
+    <string name="my_requests">My Requests</string>
+    <string name="sort_by_time">Time</string>
+    <string name="sort_by_value">Value</string>
+    <string name="sort_by_distance">Distance</string>
+
+    <!-- General -->
+    <string name="accept">Accept</string>
+    <string name="details">Details</string>
+    <string name="navigate">Navigate</string>
+    <string name="start">Start</string>
+    <string name="complete">Complete</string>
+    <string name="no_pending_requests">No Pending Requests</string>
+    <string name="no_accepted_requests">No Accepted Requests</string>
+    <string name="check_back_later">Check back later for new pickup requests</string>
+    <string name="accept_requests_message">Accept requests from the pending tab to see them here</string>
+
+    <!-- Person 4: Kabadiwala Connect - Informal to Formal Chain Strings -->
+    <string name="kc_title_new_collection">New Scrap Lot</string>
+    <string name="kc_title_recycler_selection">Select Authorized Recycler</string>
+    <string name="kc_title_handover">Formal Handover</string>
+    <string name="kc_title_payment">Settle Payment</string>
+    <string name="kc_title_earnings_ledger">Earnings Ledger</string>
+    <string name="kc_title_transactions">Transaction History</string>
+    <string name="kc_title_traceability">E-Waste Traceability</string>
+    <string name="kc_label_lot_id">Lot ID</string>
+    <string name="kc_label_handover_id">Handover ID</string>
+    <string name="kc_label_collector_name">Collector Name</string>
+    <string name="kc_label_recycler_name">Recycler Facility</string>
+    <string name="kc_label_weight">Total Weight</string>
+    <string name="kc_label_estimated_value">Estimated Value</string>
+    <string name="kc_label_final_value">Final Settled Amount</string>
+    <string name="kc_label_payment_method">Payment Method</string>
+    <string name="kc_payment_cash">Cash (Offline Instant)</string>
+    <string name="kc_payment_upi">UPI (Direct App Intent)</string>
+    <string name="kc_btn_record_handover">Confirm Digital Handover</string>
+    <string name="kc_btn_view_receipt">View Digital Receipt</string>
+    <string name="kc_btn_trace_lot">Verify Traceability</string>
+</resources>
