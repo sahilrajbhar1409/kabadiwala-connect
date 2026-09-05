@@ -30,7 +30,6 @@ import com.kabadiwalaconnect.data.profile.FirebaseUserProfileRepository
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.theme.*
 import androidx.compose.ui.platform.LocalContext
-import java.util.Locale
 
 @Composable
 fun SplashScreen(nav: NavHostController) {
@@ -188,6 +187,15 @@ fun LoginScreen(nav: NavHostController) {
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    fun normalizedIndianPhone(): String? {
+        val digits = phone.filter(Char::isDigit)
+        return when {
+            digits.length == 10 -> "+91$digits"
+            digits.length == 12 && digits.startsWith("91") -> "+$digits"
+            else -> null
+        }
+    }
+
     fun navigateForRole(role: UserRole) {
         SessionState.persistRole(context, authenticatedUser?.uid.orEmpty(), role)
         nav.navigate(role.homeRoute()) {
@@ -197,7 +205,9 @@ fun LoginScreen(nav: NavHostController) {
 
     fun resolveAuthenticatedUser(user: AuthenticatedUser) {
         authenticatedUser = user
+        loading = true
         profileRepository.getProfile(user.uid) { result ->
+            loading = false
             result.onSuccess { profile ->
                 if (profile != null) {
                     SessionState.persistRole(context, user.uid, profile.role)
@@ -207,7 +217,17 @@ fun LoginScreen(nav: NavHostController) {
                 } else {
                     showRoleSelection = true
                 }
-            }.onFailure { errorMessage = it.message ?: "Unable to load your profile." }
+            }.onFailure {
+                val savedRole = SessionState.savedRole(context, user.uid)
+                if (savedRole == null) {
+                    errorMessage = it.message ?: "Unable to load your profile."
+                } else {
+                    SessionState.persistRole(context, user.uid, savedRole)
+                    nav.navigate(savedRole.homeRoute()) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                }
+            }
         }
     }
 
@@ -278,7 +298,12 @@ fun LoginScreen(nav: NavHostController) {
         OutlinedTextField(
             value = phone,
             onValueChange = {
-                if (it.length <= 10) phone = it.filter { c -> c.isDigit() }
+                val digits = it.filter(Char::isDigit)
+                if (digits.length <= 10) {
+                    phone = digits
+                } else if (digits.length <= 12 && digits.startsWith("91")) {
+                    phone = digits.drop(2)
+                }
             },
             modifier = Modifier.fillMaxWidth(),
             leadingIcon = { Text("+91", modifier = Modifier.padding(start = 8.dp)) },
@@ -295,11 +320,16 @@ fun LoginScreen(nav: NavHostController) {
                     errorMessage = "Unable to start phone verification."
                     return@Button
                 }
+                val formattedPhone = normalizedIndianPhone()
+                if (formattedPhone == null) {
+                    errorMessage = "Enter a valid 10-digit Indian phone number."
+                    return@Button
+                }
                 loading = true
                 errorMessage = null
                 authRepository.startPhoneVerification(
                     currentActivity,
-                    "+91$phone",
+                    formattedPhone,
                     onCodeSent = {
                         verificationId = it
                         loading = false
