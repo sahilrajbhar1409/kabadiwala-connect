@@ -12,6 +12,14 @@ data class Material(
 )
 
 enum class MaterialCategory {
+    CRT,
+    LCD,
+    PCB,
+    CABLES,
+    BATTERIES,
+    MOTORS,
+    MAGNETS,
+    MIXED_PLASTICS,
     PAPER,
     PLASTIC,
     METAL,

@@ -17,10 +17,12 @@ data class CollectionRequest(
 )
 
 enum class CollectionRequestStatus {
+    REQUESTED,
     PENDING,
     ASSIGNED,
     SCHEDULED,
     IN_PROGRESS,
     COMPLETED,
-    CANCELLED
+    CANCELLED,
+    REJECTED
 }

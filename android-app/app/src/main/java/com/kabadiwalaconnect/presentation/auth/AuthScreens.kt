@@ -17,6 +17,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.kabadiwalaconnect.data.SessionState
+import com.kabadiwalaconnect.data.model.UserRole
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.theme.*
 
@@ -153,6 +155,7 @@ fun OnboardingScreen(nav: NavHostController) {
 @Composable
 fun LoginScreen(nav: NavHostController) {
     var phone by remember { mutableStateOf("") }
+    var selectedRole by remember { mutableStateOf(UserRole.CITIZEN) }
 
     AuthContainer(
         title = "Welcome back 👋",
@@ -173,8 +176,30 @@ fun LoginScreen(nav: NavHostController) {
             shape = RoundedCornerShape(14.dp)
         )
         Spacer(Modifier.height(18.dp))
+        Text("Sign in as", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = selectedRole == UserRole.CITIZEN,
+                onClick = { selectedRole = UserRole.CITIZEN },
+                label = { Text("Citizen") }
+            )
+            FilterChip(
+                selected = selectedRole == UserRole.COLLECTOR,
+                onClick = { selectedRole = UserRole.COLLECTOR },
+                label = { Text("Collector") }
+            )
+        }
+        Spacer(Modifier.height(18.dp))
         Button(
-            onClick = { nav.navigate(Routes.HOME) },
+            onClick = {
+                SessionState.signInAs(selectedRole)
+                nav.navigate(if (selectedRole == UserRole.COLLECTOR) {
+                    Routes.COLLECTOR_DASHBOARD
+                } else {
+                    Routes.HOME
+                })
+            },
             enabled = phone.length >= 10,
             modifier = Modifier
                 .fillMaxWidth()
@@ -194,7 +219,14 @@ fun LoginScreen(nav: NavHostController) {
         }
         Spacer(Modifier.height(20.dp))
         OutlinedButton(
-            onClick = { nav.navigate(Routes.HOME) },
+            onClick = {
+                SessionState.signInAs(selectedRole)
+                nav.navigate(if (selectedRole == UserRole.COLLECTOR) {
+                    Routes.COLLECTOR_DASHBOARD
+                } else {
+                    Routes.HOME
+                })
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
@@ -253,7 +285,10 @@ fun RegisterScreen(nav: NavHostController) {
         )
         Spacer(Modifier.height(22.dp))
         Button(
-            onClick = { nav.navigate(Routes.HOME) },
+            onClick = {
+                SessionState.signInAs(UserRole.CITIZEN)
+                nav.navigate(Routes.HOME)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

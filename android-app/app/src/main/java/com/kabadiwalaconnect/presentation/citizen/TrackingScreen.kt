@@ -1,54 +1,116 @@
 package com.kabadiwalaconnect.presentation.citizen
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.kabadiwalaconnect.data.model.LotStatus
+import com.kabadiwalaconnect.data.repository.CollectionRepositoryProvider
+import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.AppTopBar
 import com.kabadiwalaconnect.ui.components.TrackingStep
 import com.kabadiwalaconnect.ui.theme.*
 
 @Composable
-fun TrackingScreen(nav: NavHostController) {
+fun TrackingScreen(nav: NavHostController, lotId: String? = null) {
+    val repository = CollectionRepositoryProvider.instance
+    val lot = lotId?.let { repository.getLot(it) } ?: repository.getLatestLot()
+    val currentStatus = lot?.status ?: LotStatus.REQUESTED
+    val timeline = listOf(
+        LotStatus.REQUESTED to "Pickup requested",
+        LotStatus.ASSIGNED to "Collector assigned",
+        LotStatus.ACCEPTED to "Pickup accepted",
+        LotStatus.PICKUP_IN_PROGRESS to "Pickup in progress",
+        LotStatus.COLLECTED to "Materials collected",
+        LotStatus.HANDED_OVER to "Handed to recycler",
+        LotStatus.RECYCLER_CONFIRMED to "Recycler confirmed",
+        LotStatus.PAID to "Payment completed",
+        LotStatus.RECYCLED to "Recycled"
+    )
+
     Scaffold(
         containerColor = Cream,
         topBar = { AppTopBar(nav, "Pickup tracking") }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Surface(
-                modifier = Modifier.fillMaxWidth().height(240.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = GreenLight
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("📍", fontSize = 65.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Collector is on the way", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, fontSize = 18.sp)
-                        Text("Map integration ready", color = TextMuted)
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    color = GreenLight
+                ) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text("Current status", color = GreenDark, fontSize = 13.sp)
+                        Text(
+                            currentStatus.displayName(),
+                            color = GreenDark,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp
+                        )
+                        Text(
+                            lot?.let { "Lot ${it.lotId}" } ?: "No pickup request found",
+                            color = TextMuted
+                        )
                     }
                 }
             }
-            Spacer(Modifier.height(25.dp))
-            Text("Pickup status", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(18.dp))
-            TrackingStep("Pickup requested", "5:02 PM", true)
-            TrackingStep("Collector assigned", "5:06 PM", true)
-            TrackingStep("On the way", "5:18 PM", true)
-            TrackingStep("Materials collected", "Pending", false)
-            Spacer(Modifier.weight(1f))
-            OutlinedButton(
-                onClick = {},
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp)
-            ) { Text("Contact collector") }
+            item { Text("Pickup status", style = MaterialTheme.typography.titleLarge) }
+            items(timeline) { (status, title) ->
+                val reached = currentStatus != LotStatus.CANCELLED &&
+                    status.ordinal <= currentStatus.ordinal
+                TrackingStep(
+                    title = title,
+                    time = if (status == currentStatus) "Current" else if (reached) "Completed" else "Pending",
+                    completed = reached
+                )
+            }
+            item {
+                OutlinedButton(
+                    onClick = { },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("Contact collector")
+                }
+            }
+            item {
+                OutlinedButton(
+                    onClick = {
+                        nav.navigate(Routes.HISTORY) {
+                            launchSingleTop = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text("View history")
+                }
+            }
         }
     }
+}
+
+private fun LotStatus.displayName(): String = when (this) {
+    LotStatus.REQUESTED -> "Pickup requested"
+    LotStatus.ASSIGNED -> "Collector assigned"
+    LotStatus.ACCEPTED -> "Pickup accepted"
+    LotStatus.PICKUP_IN_PROGRESS -> "Pickup in progress"
+    LotStatus.COLLECTED -> "Materials collected"
+    LotStatus.HANDED_OVER -> "Handed to recycler"
+    LotStatus.RECYCLER_CONFIRMED -> "Recycler confirmed"
+    LotStatus.PAID -> "Payment completed"
+    LotStatus.RECYCLED -> "Recycled"
+    LotStatus.CANCELLED -> "Pickup cancelled"
 }

@@ -12,28 +12,35 @@ import com.kabadiwalaconnect.navigation.Routes
 
 @Composable
 fun BottomBar(nav: NavHostController, selected: String) {
+    fun navigateTo(route: String) {
+        nav.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(Routes.HOME) { saveState = true }
+        }
+    }
     NavigationBar(containerColor = androidx.compose.ui.graphics.Color.White) {
         NavigationBarItem(
             selected = selected == Routes.HOME,
-            onClick = { nav.navigate(Routes.HOME) },
+            onClick = { navigateTo(Routes.HOME) },
             icon = { Icon(Icons.Default.Home, null) },
             label = { Text("Home") }
         )
         NavigationBarItem(
             selected = selected == Routes.PICKUP,
-            onClick = { nav.navigate(Routes.PICKUP) },
+            onClick = { navigateTo(Routes.PICKUP) },
             icon = { Icon(Icons.Default.LocalShipping, null) },
             label = { Text("Pickup") }
         )
         NavigationBarItem(
             selected = selected == Routes.HISTORY,
-            onClick = { nav.navigate(Routes.HISTORY) },
+            onClick = { navigateTo(Routes.HISTORY) },
             icon = { Icon(Icons.Default.History, null) },
             label = { Text("History") }
         )
         NavigationBarItem(
             selected = selected == Routes.PROFILE,
-            onClick = { nav.navigate(Routes.PROFILE) },
+            onClick = { navigateTo(Routes.PROFILE) },
             icon = { Icon(Icons.Default.Person, null) },
             label = { Text("Profile") }
         )

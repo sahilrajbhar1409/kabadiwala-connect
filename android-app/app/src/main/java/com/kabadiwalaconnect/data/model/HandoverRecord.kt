@@ -9,7 +9,9 @@ data class HandoverRecord(
     val timestamp: String,
     val status: HandoverStatus,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val actualWeight: Double? = null,
+    val actualValue: Double? = null
 )
 
 enum class HandoverStatus {

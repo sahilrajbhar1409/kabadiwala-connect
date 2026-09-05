@@ -21,9 +21,14 @@ data class Lot(
 )
 
 enum class LotStatus {
-    CREATED,
-    PICKED_UP,
+    REQUESTED,
+    ASSIGNED,
+    ACCEPTED,
+    PICKUP_IN_PROGRESS,
+    COLLECTED,
     HANDED_OVER,
+    RECYCLER_CONFIRMED,
+    PAID,
     RECYCLED,
-    CANCELLED
+    CANCELLED,
 }
