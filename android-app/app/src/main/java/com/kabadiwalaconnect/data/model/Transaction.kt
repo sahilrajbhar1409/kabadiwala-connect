@@ -8,8 +8,15 @@ data class Transaction(
     val amount: Double,
     val status: TransactionStatus,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val paymentMethod: PaymentMethod = PaymentMethod.UPI
 )
+
+enum class PaymentMethod {
+    CASH,
+    UPI,
+    BANK
+}
 
 enum class TransactionStatus {
     PENDING,

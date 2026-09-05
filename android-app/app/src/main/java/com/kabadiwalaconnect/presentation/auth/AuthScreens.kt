@@ -189,16 +189,17 @@ fun LoginScreen(nav: NavHostController) {
                 onClick = { selectedRole = UserRole.COLLECTOR },
                 label = { Text("Collector") }
             )
+            FilterChip(
+                selected = selectedRole == UserRole.RECYCLER,
+                onClick = { selectedRole = UserRole.RECYCLER },
+                label = { Text("Recycler") }
+            )
         }
         Spacer(Modifier.height(18.dp))
         Button(
             onClick = {
                 SessionState.signInAs(selectedRole)
-                nav.navigate(if (selectedRole == UserRole.COLLECTOR) {
-                    Routes.COLLECTOR_DASHBOARD
-                } else {
-                    Routes.HOME
-                })
+                nav.navigate(selectedRole.homeRoute())
             },
             enabled = phone.length >= 10,
             modifier = Modifier
@@ -221,11 +222,7 @@ fun LoginScreen(nav: NavHostController) {
         OutlinedButton(
             onClick = {
                 SessionState.signInAs(selectedRole)
-                nav.navigate(if (selectedRole == UserRole.COLLECTOR) {
-                    Routes.COLLECTOR_DASHBOARD
-                } else {
-                    Routes.HOME
-                })
+                nav.navigate(selectedRole.homeRoute())
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -234,6 +231,7 @@ fun LoginScreen(nav: NavHostController) {
         ) {
             Text("Continue with Google")
         }
+
         Spacer(Modifier.height(25.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -248,6 +246,12 @@ fun LoginScreen(nav: NavHostController) {
             )
         }
     }
+}
+
+private fun UserRole.homeRoute(): String = when (this) {
+    UserRole.COLLECTOR -> Routes.COLLECTOR_DASHBOARD
+    UserRole.RECYCLER -> Routes.RECYCLER_DASHBOARD
+    else -> Routes.HOME
 }
 
 @Composable

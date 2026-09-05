@@ -6,6 +6,10 @@ import com.kabadiwalaconnect.data.model.HandoverRecord
 import com.kabadiwalaconnect.data.model.HandoverStatus
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
+import com.kabadiwalaconnect.data.model.RecyclingRecord
+import com.kabadiwalaconnect.data.model.RecyclingStatus
+import com.kabadiwalaconnect.data.model.Transaction
+import com.kabadiwalaconnect.data.model.TransactionStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -118,12 +122,63 @@ interface CollectionRepository {
         getCollectorLots(collectorId).filter { it.status.isCompletedCollection() }.asReversed()
     fun getEarnings(collectorId: String): Double = getCollectorEarnings(collectorId)
     fun getHistory(collectorId: String): List<Lot> = getCollectorHistory(collectorId)
+
+    /** Lots which have left the collector chain and can be received by a recycler. */
+    fun getAvailableHandedOverLots(): List<Lot> =
+        getLots().filter { it.status == LotStatus.HANDED_OVER }.asReversed()
+
+    fun getAvailableRecyclerLots(): List<Lot> = getAvailableHandedOverLots()
+
+    /** Lots that are assigned to, or already processed by, this recycler. */
+    fun getIncomingLots(recyclerId: String): List<Lot> =
+        getLots().filter {
+            it.recyclerId == recyclerId &&
+                it.status != LotStatus.CANCELLED &&
+                it.status != LotStatus.RECYCLED
+        }.asReversed()
+
+    fun getRecyclerLots(recyclerId: String): List<Lot> =
+        getLots().filter { it.recyclerId == recyclerId }.asReversed()
+
+    fun assignRecycler(lotId: String, recyclerId: String): Lot
+    fun confirmRecyclerReceipt(lotId: String, recyclerId: String): Lot
+    fun confirmHandover(lotId: String, recyclerId: String): Lot =
+        confirmRecyclerReceipt(lotId, recyclerId)
+
+    fun createRecyclingRecord(record: RecyclingRecord): RecyclingRecord
+    fun getRecyclingRecords(recyclerId: String): List<RecyclingRecord>
+    fun recordRecycling(
+        lotId: String,
+        recyclerId: String,
+        processedWeight: Double,
+        actualMaterial: String = "",
+        facility: String = "",
+        notes: String = "",
+        recyclingDate: String = ""
+    ): RecyclingRecord
+
+    fun createTransaction(transaction: Transaction): Transaction
+    fun getRecyclerTransactions(recyclerId: String): List<Transaction>
+    fun payRecycler(
+        lotId: String,
+        recyclerId: String,
+        paymentMethod: com.kabadiwalaconnect.data.model.PaymentMethod =
+            com.kabadiwalaconnect.data.model.PaymentMethod.UPI
+    ): Transaction
+
+    fun getRecyclerPayments(recyclerId: String): List<Transaction> =
+        getRecyclerTransactions(recyclerId)
+
+    fun getRecyclerHistory(recyclerId: String): List<Lot> =
+        getRecyclerLots(recyclerId).filter { it.status == LotStatus.RECYCLED }
 }
 
 class InMemoryCollectionRepository : CollectionRepository {
     private val collectionRequests = LinkedHashMap<String, CollectionRequest>()
     private val lots = LinkedHashMap<String, Lot>()
     private val handovers = LinkedHashMap<String, HandoverRecord>()
+    private val recyclingRecords = LinkedHashMap<String, RecyclingRecord>()
+    private val transactions = LinkedHashMap<String, Transaction>()
     private var lotSequence = 0
 
     @Synchronized
@@ -371,6 +426,144 @@ class InMemoryCollectionRepository : CollectionRepository {
             )
         }
         return record
+    }
+
+    @Synchronized
+    override fun assignRecycler(lotId: String, recyclerId: String): Lot {
+        require(recyclerId.isNotBlank()) { "Recycler id is required." }
+        val lot = lots[lotId] ?: error("Lot not found: $lotId")
+        require(lot.status == LotStatus.HANDED_OVER) {
+            "Only a handed-over lot can be assigned to a recycler."
+        }
+        val updated = lot.copy(recyclerId = recyclerId.trim(), updatedAt = now())
+        lots[lotId] = updated
+        return updated
+    }
+
+    @Synchronized
+    override fun confirmRecyclerReceipt(lotId: String, recyclerId: String): Lot {
+        require(recyclerId.isNotBlank()) { "Recycler id is required." }
+        val lot = lots[lotId] ?: error("Lot not found: $lotId")
+        require(lot.status == LotStatus.HANDED_OVER) {
+            "Only a handed-over lot can be confirmed."
+        }
+        require(lot.recyclerId.isNullOrBlank() || lot.recyclerId == recyclerId) {
+            "This lot is assigned to another recycler."
+        }
+        val timestamp = now()
+        val updated = lot.copy(
+            recyclerId = recyclerId.trim(),
+            status = LotStatus.RECYCLER_CONFIRMED,
+            updatedAt = timestamp
+        )
+        lots[lotId] = updated
+        return updated
+    }
+
+    @Synchronized
+    override fun createRecyclingRecord(record: RecyclingRecord): RecyclingRecord {
+        require(!recyclingRecords.containsKey(record.id)) {
+            "Recycling record already exists: ${record.id}"
+        }
+        require(record.processedWeight.isFinite() && record.processedWeight > 0) {
+            "Processed weight must be greater than zero."
+        }
+        recyclingRecords[record.id] = record
+        return record
+    }
+
+    @Synchronized
+    override fun getRecyclingRecords(recyclerId: String): List<RecyclingRecord> =
+        recyclingRecords.values.filter { it.recyclerId == recyclerId }.toList().asReversed()
+
+    @Synchronized
+    override fun recordRecycling(
+        lotId: String,
+        recyclerId: String,
+        processedWeight: Double,
+        actualMaterial: String,
+        facility: String,
+        notes: String,
+        recyclingDate: String
+    ): RecyclingRecord {
+        require(recyclerId.isNotBlank()) { "Recycler id is required." }
+        require(processedWeight.isFinite() && processedWeight > 0) {
+            "Processed weight must be greater than zero."
+        }
+        require(actualMaterial.isNotBlank()) { "Actual material is required." }
+        val lot = lots[lotId] ?: error("Lot not found: $lotId")
+        require(lot.recyclerId == recyclerId) { "This lot is assigned to another recycler." }
+        require(lot.status == LotStatus.PAID) {
+            "Payment must be completed before recycling is recorded."
+        }
+        val timestamp = now()
+        require(recyclingRecords.values.none { it.lotId == lotId }) {
+            "A recycling record already exists for this lot."
+        }
+        val record = RecyclingRecord(
+            id = "RECYCLE-${UUID.randomUUID()}",
+            lotId = lotId,
+            recyclerId = recyclerId,
+            materialId = lot.materialId,
+            processedWeight = processedWeight,
+            recycledAt = timestamp,
+            status = RecyclingStatus.COMPLETED,
+            createdAt = timestamp,
+            updatedAt = timestamp,
+            actualMaterial = actualMaterial.trim(),
+            recycledQuantity = processedWeight,
+            recyclingDate = recyclingDate.ifBlank { timestamp },
+            facility = facility.trim(),
+            notes = notes.trim()
+        )
+        recyclingRecords[record.id] = record
+        lots[lotId] = lot.copy(status = LotStatus.RECYCLED, updatedAt = timestamp)
+        return record
+    }
+
+    @Synchronized
+    override fun createTransaction(transaction: Transaction): Transaction {
+        require(!transactions.containsKey(transaction.id)) {
+            "Transaction already exists: ${transaction.id}"
+        }
+        require(transaction.amount.isFinite() && transaction.amount >= 0) {
+            "Transaction amount is invalid."
+        }
+        transactions[transaction.id] = transaction
+        return transaction
+    }
+
+    @Synchronized
+    override fun getRecyclerTransactions(recyclerId: String): List<Transaction> =
+        transactions.values.filter { it.payeeId == recyclerId }.toList().asReversed()
+
+    @Synchronized
+    override fun payRecycler(
+        lotId: String,
+        recyclerId: String,
+        paymentMethod: com.kabadiwalaconnect.data.model.PaymentMethod
+    ): Transaction {
+        require(recyclerId.isNotBlank()) { "Recycler id is required." }
+        val lot = lots[lotId] ?: error("Lot not found: $lotId")
+        require(lot.recyclerId == recyclerId) { "This lot is assigned to another recycler." }
+        require(lot.status == LotStatus.RECYCLER_CONFIRMED) {
+            "Confirm receipt before paying for this lot."
+        }
+        val timestamp = now()
+        val transaction = Transaction(
+            id = "KC-TXN-${UUID.randomUUID().toString().take(6).uppercase(Locale.US)}",
+            lotId = lotId,
+            payerId = "platform",
+            payeeId = recyclerId,
+            amount = lot.actualValue ?: lot.estimatedValue,
+            status = TransactionStatus.COMPLETED,
+            createdAt = timestamp,
+            updatedAt = timestamp,
+            paymentMethod = paymentMethod
+        )
+        transactions[transaction.id] = transaction
+        lots[lotId] = lot.copy(status = LotStatus.PAID, updatedAt = timestamp)
+        return transaction
     }
 
     private fun requireCollectorLot(lotId: String, collectorId: String): Lot {

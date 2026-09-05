@@ -23,6 +23,14 @@ import com.kabadiwalaconnect.presentation.collector.CollectorHandoverScreen
 import com.kabadiwalaconnect.presentation.collector.CollectorHistoryScreen
 import com.kabadiwalaconnect.presentation.collector.CollectorProfileScreen
 import com.kabadiwalaconnect.presentation.collector.CollectorRequestsScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerAvailableLotsScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerDashboardScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerHistoryScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerIncomingLotsScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerLotDetailsScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerPaymentsScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerProfileScreen
+import com.kabadiwalaconnect.presentation.recycler.RecyclerRecyclingScreen
 
 @Composable
 fun AppNavigation() {
@@ -61,5 +69,17 @@ fun AppNavigation() {
         composable(Routes.COLLECTOR_EARNINGS) { CollectorEarningsScreen(navController) }
         composable(Routes.COLLECTOR_HISTORY) { CollectorHistoryScreen(navController) }
         composable(Routes.COLLECTOR_PROFILE) { CollectorProfileScreen(navController) }
+        composable(Routes.RECYCLER_DASHBOARD) { RecyclerDashboardScreen(navController) }
+        composable(Routes.RECYCLER_AVAILABLE_LOTS) { RecyclerAvailableLotsScreen(navController) }
+        composable(Routes.RECYCLER_INCOMING_LOTS) { RecyclerIncomingLotsScreen(navController) }
+        composable(Routes.RECYCLER_LOT_DETAILS) { entry ->
+            RecyclerLotDetailsScreen(navController, entry.arguments?.getString("lotId"))
+        }
+        composable(Routes.RECYCLER_RECYCLING) { entry ->
+            RecyclerRecyclingScreen(navController, entry.arguments?.getString("lotId"))
+        }
+        composable(Routes.RECYCLER_PAYMENTS) { RecyclerPaymentsScreen(navController) }
+        composable(Routes.RECYCLER_HISTORY) { RecyclerHistoryScreen(navController) }
+        composable(Routes.RECYCLER_PROFILE) { RecyclerProfileScreen(navController) }
     }
 }

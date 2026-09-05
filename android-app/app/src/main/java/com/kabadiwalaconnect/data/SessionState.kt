@@ -16,6 +16,7 @@ object SessionState {
 
     const val CITIZEN_ID = "citizen-session"
     const val COLLECTOR_ID = "collector-session"
+    const val RECYCLER_ID = "recycler-session"
 
     fun signInAs(newRole: UserRole) {
         role = newRole
