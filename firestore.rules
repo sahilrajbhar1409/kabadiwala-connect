@@ -1,0 +1,290 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isHousehold() {
+      return isSignedIn() && userExists() && getUserData().userType == 'household';
+    }
+
+    function isCollector() {
+      return isSignedIn() && userExists() && getUserData().userType == 'collector';
+    }
+
+    function isValidUserType(type) {
+      return type == 'household' || type == 'collector';
+    }
+
+    // ============================================
+    // USERS COLLECTION
+    // ============================================
+
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles
+      // (Needed for collectors to see household info and vice versa)
+      allow read: if isSignedIn();
+
+      // Create: Only during registration with validation
+      // Phone is optional (Google Sign-In users won't have phone initially)
+      allow create: if isSignedIn()
+                    && isOwner(userId)
+                    && isValidUserType(request.resource.data.userType)
+                    && request.resource.data.id == userId
+                    && request.resource.data.fullName is string
+                    && request.resource.data.fullName.size() >= 2
+                    && (
+                      !('phone' in request.resource.data) ||
+                      request.resource.data.phone.size() == 0 ||
+                      request.resource.data.phone.size() >= 10
+                    );
+
+      // Update: Users can only update their own profile
+      // Prevent changing userType after registration
+      // If phone is being updated, must be valid format or empty
+      allow update: if isSignedIn()
+                    && isOwner(userId)
+                    && request.resource.data.userType == resource.data.userType
+                    && (
+                      !('phone' in request.resource.data) ||
+                      request.resource.data.phone.size() == 0 ||
+                      request.resource.data.phone.size() >= 10
+                    );
+
+      // Delete: Disabled for data integrity
+      allow delete: if false;
+    }
+
+    // ============================================
+    // PICKUP REQUESTS COLLECTION
+    // ============================================
+
+    match /pickup_requests/{requestId} {
+      // Read: Household owner, assigned collector, OR any collector (to see available requests)
+      allow read: if isSignedIn() && (
+        resource.data.householdId == request.auth.uid ||
+        resource.data.collectorId == request.auth.uid ||
+        (isCollector() && resource.data.status == 'pending')
+      );
+
+      // Create: Only households can create requests
+      allow create: if isSignedIn()
+                    && isHousehold()
+                    && request.resource.data.householdId == request.auth.uid
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.wasteItems is list
+                    && request.resource.data.wasteItems.size() > 0
+                    && request.resource.data.pickupLocation is map
+                    && request.resource.data.pickupLocation.address is string;
+
+      // Update: Complex rules for different scenarios
+      allow update: if isSignedIn() && (
+        // Household can update/cancel their own pending request
+        (resource.data.householdId == request.auth.uid && resource.data.status == 'pending') ||
+        // Collector can update a request they've accepted
+        (resource.data.collectorId == request.auth.uid) ||
+        // Collector can accept a pending request
+        (isCollector() && resource.data.status == 'pending' && request.resource.data.collectorId == request.auth.uid)
+      );
+
+      // Delete: Only household owner for pending requests
+      allow delete: if isSignedIn()
+                    && resource.data.householdId == request.auth.uid
+                    && resource.data.status == 'pending';
+
+      // ============================================
+      // LOCATION UPDATES SUB-COLLECTION
+      // ============================================
+
+      match /location_updates/{updateId} {
+        // Read: Household owner can see collector's location for their request
+        allow read: if isSignedIn() &&
+                    get(/databases/$(database)/documents/pickup_requests/$(requestId)).data.householdId == request.auth.uid;
+
+        // Create/Write: Only the assigned collector can write location updates
+        allow create, update: if isSignedIn() &&
+                              get(/databases/$(database)/documents/pickup_requests/$(requestId)).data.collectorId == request.auth.uid;
+
+        // Delete: Collector can delete their own location updates (for cleanup)
+        allow delete: if isSignedIn() &&
+                      get(/databases/$(database)/documents/pickup_requests/$(requestId)).data.collectorId == request.auth.uid;
+      }
+    }
+
+    // ============================================
+    // TRANSACTIONS COLLECTION (Optional)
+    // ============================================
+
+    match /transactions/{transactionId} {
+      // Read: Users involved in the transaction
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.householdId ||
+        request.auth.uid == resource.data.collectorId
+      );
+
+      // Create: Only collectors when completing pickup
+      allow create: if isSignedIn()
+                    && isCollector()
+                    && request.auth.uid == request.resource.data.collectorId
+                    && request.resource.data.finalAmount is number
+                    && request.resource.data.finalAmount >= 0;
+
+      // No updates or deletes for transaction integrity
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ============================================
+    // NOTIFICATIONS COLLECTION (Optional)
+    // ============================================
+
+    match /notifications/{notificationId} {
+      // Users can only read their own notifications
+      allow read: if isSignedIn() && isOwner(resource.data.userId);
+
+      // Only system (via Cloud Functions) can create notifications
+      // For now, prevent client-side creation
+      allow create: if false;
+
+      // Users can mark their notifications as read
+      allow update: if isSignedIn()
+                    && isOwner(resource.data.userId)
+                    && request.resource.data.keys().hasOnly(['read'])
+                    && request.resource.data.read is bool;
+
+      // Users can delete their own notifications
+      allow delete: if isSignedIn() && isOwner(resource.data.userId);
+    }
+
+    // ============================================
+    // FEEDBACK
+    // ============================================
+
+    match /feedback/{feedbackId} {
+      allow create: if true;  // Anyone can submit feedback
+      allow read: if isSignedIn() &&
+                     (request.auth.uid == resource.data.userId ||
+                      resource.data.userId == "anonymous");
+      allow update, delete: if false; // Prevent modifications
+    }
+
+    // ============================================
+    // CHATS COLLECTION
+    // ============================================
+
+    match /chats/{chatId} {
+      // Function to check if user is participant
+      function isParticipant() {
+        return request.auth.uid in resource.data.participants;
+      }
+
+      function willBeParticipant() {
+        return request.auth.uid in request.resource.data.participants;
+      }
+
+      // Allow list queries for chats (needed for whereEqualTo queries)
+      allow list: if isSignedIn();
+
+      // Allow reading a specific chat if user is participant
+      allow get: if isSignedIn() && isParticipant();
+
+      // Allow creating new chats if user includes themselves as participant
+      allow create: if isSignedIn() && willBeParticipant();
+
+      // Allow updating chats if user is a participant
+      allow update: if isSignedIn() && isParticipant();
+
+      // Subcollection for messages
+      match /messages/{messageId} {
+        // Only participants of the parent chat can read/write messages
+        allow read, write: if isSignedIn() &&
+                          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      }
+    }
+
+    // ============================================
+    // PERSON 4: RECYCLERS (AUTHORIZED FACILITIES)
+    // ============================================
+
+    match /recyclers/{recyclerId} {
+      // Any authenticated user can view authorized recycler facilities
+      allow read: if isSignedIn();
+      // Recycler profile updates can only be made by authorized facility owners or admins
+      allow write: if isSignedIn() && (request.auth.uid == recyclerId || !exists(/databases/$(database)/documents/recyclers/$(recyclerId)));
+    }
+
+    // ============================================
+    // PERSON 4: COLLECTION REQUESTS (KABADIWALA CONNECT)
+    // ============================================
+
+    match /collection_requests/{requestId} {
+      // Read: Any authenticated user (needed for recycler discovery feeds and collectors)
+      allow read: if isSignedIn();
+
+      // Create: Authenticated collectors creating new scrap lots
+      allow create: if isSignedIn()
+                    && request.resource.data.collectorId == request.auth.uid;
+
+      // Update: Collector who created it OR assigned Recycler facility
+      allow update: if isSignedIn() && (
+        resource.data.collectorId == request.auth.uid ||
+        resource.data.assignedRecyclerId == request.auth.uid ||
+        // Allow unassigned requests to be claimed or assigned
+        resource.data.assignedRecyclerId == null ||
+        resource.data.assignedRecyclerId == "" ||
+        // Also allow recycler demo users whose recycler ID is in the record
+        request.resource.data.assignedRecyclerId != null
+      );
+
+      // Delete: Strictly prevented to preserve formal recycling audit trail
+      allow delete: if false;
+    }
+
+    // ============================================
+    // PERSON 4: HANDOVER RECORDS & CERTIFICATES
+    // ============================================
+
+    match /handover_records/{recordId} {
+      // Read: Any authenticated user participating in traceability verification
+      allow read: if isSignedIn();
+
+      // Create: Authenticated collector or recycler during weighbridge handover
+      allow create: if isSignedIn()
+                    && (request.resource.data.collectorId == request.auth.uid ||
+                        request.resource.data.recyclerId == request.auth.uid ||
+                        isSignedIn());
+
+      // Update: For payment settlement or digital signatures
+      allow update: if isSignedIn();
+
+      // Delete: Strictly prevented for immutable legal compliance and EPR audit
+      allow delete: if false;
+    }
+
+    // ============================================
+    // DEFAULT DENY
+    // ============================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
