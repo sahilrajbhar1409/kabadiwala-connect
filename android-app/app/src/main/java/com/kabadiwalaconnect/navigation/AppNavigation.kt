@@ -83,6 +83,9 @@ fun AppNavigation() {
         composable(Routes.RECYCLER_RECYCLING) { entry ->
             RecyclerRecyclingScreen(navController, entry.arguments?.getString("lotId"))
         }
+        composable(Routes.RECYCLER_TRACEABILITY) { entry ->
+            TraceabilityScreen(navController, entry.arguments?.getString("lotId"))
+        }
         composable(Routes.RECYCLER_PAYMENTS) { RecyclerPaymentsScreen(navController) }
         composable(Routes.RECYCLER_HISTORY) { RecyclerHistoryScreen(navController) }
         composable(Routes.RECYCLER_PROFILE) { RecyclerProfileScreen(navController) }

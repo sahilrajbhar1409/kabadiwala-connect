@@ -29,6 +29,7 @@ object Routes {
     const val RECYCLER_INCOMING_LOTS = "recycler-incoming-lots"
     const val RECYCLER_LOT_DETAILS = "recycler-lot-details/{lotId}"
     const val RECYCLER_RECYCLING = "recycler-recycling/{lotId}"
+    const val RECYCLER_TRACEABILITY = "recycler-traceability/{lotId}"
     const val RECYCLER_PAYMENTS = "recycler-payments"
     const val RECYCLER_HISTORY = "recycler-history"
     const val RECYCLER_PROFILE = "recycler-profile"
@@ -40,5 +41,5 @@ object Routes {
     fun collectorHandover(lotId: String): String = "collector-handover/$lotId"
     fun recyclerLotDetails(lotId: String): String = "recycler-lot-details/$lotId"
     fun recyclerRecycling(lotId: String): String = "recycler-recycling/$lotId"
-    fun recyclerTraceability(lotId: String): String = "traceability/$lotId"
+    fun recyclerTraceability(lotId: String): String = "recycler-traceability/$lotId"
 }
