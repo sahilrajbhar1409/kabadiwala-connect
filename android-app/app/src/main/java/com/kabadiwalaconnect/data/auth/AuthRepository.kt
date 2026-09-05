@@ -1,6 +1,8 @@
 package com.kabadiwalaconnect.data.auth
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
 
 data class AuthenticatedUser(
     val uid: String,
@@ -16,6 +18,8 @@ interface AuthRepository {
         idToken: String,
         callback: (Result<AuthenticatedUser>) -> Unit
     )
+
+    fun googleSignInIntent(context: Context): Intent
 
     fun startPhoneVerification(
         activity: Activity,

@@ -1,6 +1,8 @@
 package com.kabadiwalaconnect.data.auth
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
@@ -8,6 +10,8 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthOptions
 import com.google.firebase.auth.PhoneAuthProvider
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import java.util.concurrent.TimeUnit
 
 class FirebaseAuthRepository(
@@ -38,6 +42,21 @@ class FirebaseAuthRepository(
                     callback(Result.failure(task.exception ?: IllegalStateException("Google sign-in failed")))
                 }
             }
+
+    }
+
+    override fun googleSignInIntent(context: Context): Intent {
+        val resourceId = context.resources.getIdentifier(
+            "default_web_client_id", "string", context.packageName
+        )
+        require(resourceId != 0) {
+            "Firebase Google sign-in client ID is missing from google-services configuration"
+        }
+        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(context.getString(resourceId))
+            .requestEmail()
+            .build()
+        return GoogleSignIn.getClient(context, options).signInIntent
     }
 
     override fun startPhoneVerification(

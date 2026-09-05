@@ -1,5 +1,6 @@
 package com.kabadiwalaconnect.presentation.auth
 
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,17 +18,38 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.kabadiwalaconnect.data.SessionState
+import com.kabadiwalaconnect.data.auth.AuthenticatedUser
+import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
 import com.kabadiwalaconnect.data.model.UserRole
+import com.kabadiwalaconnect.data.model.User
+import com.kabadiwalaconnect.data.profile.FirebaseUserProfileRepository
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.theme.*
+import androidx.compose.ui.platform.LocalContext
+import java.util.Locale
 
 @Composable
 fun SplashScreen(nav: NavHostController) {
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(1300)
-        nav.navigate(Routes.ONBOARDING) {
-            popUpTo(Routes.SPLASH) { inclusive = true }
+        val firebaseUser = FirebaseAuthRepository().currentUser()
+        if (firebaseUser == null) {
+            nav.navigate(Routes.ONBOARDING) {
+                popUpTo(Routes.SPLASH) { inclusive = true }
+            }
+            return@LaunchedEffect
+        }
+
+        FirebaseUserProfileRepository().getProfile(firebaseUser.uid) { result ->
+            val role = result.getOrNull()?.role ?: SessionState.savedRole(context, firebaseUser.uid)
+            val destination = role?.let { it.homeRoute() } ?: Routes.LOGIN
+            if (role != null) SessionState.persistRole(context, firebaseUser.uid, role)
+            nav.navigate(destination) { popUpTo(Routes.SPLASH) { inclusive = true } }
         }
     }
 
@@ -154,8 +176,98 @@ fun OnboardingScreen(nav: NavHostController) {
 
 @Composable
 fun LoginScreen(nav: NavHostController) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val authRepository = remember { FirebaseAuthRepository() }
+    val profileRepository = remember { FirebaseUserProfileRepository() }
     var phone by remember { mutableStateOf("") }
-    var selectedRole by remember { mutableStateOf(UserRole.CITIZEN) }
+    var otp by remember { mutableStateOf("") }
+    var verificationId by remember { mutableStateOf<String?>(null) }
+    var authenticatedUser by remember { mutableStateOf<AuthenticatedUser?>(null) }
+    var showRoleSelection by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    fun navigateForRole(role: UserRole) {
+        SessionState.persistRole(context, authenticatedUser?.uid.orEmpty(), role)
+        nav.navigate(role.homeRoute()) {
+            popUpTo(Routes.LOGIN) { inclusive = true }
+        }
+    }
+
+    fun resolveAuthenticatedUser(user: AuthenticatedUser) {
+        authenticatedUser = user
+        profileRepository.getProfile(user.uid) { result ->
+            result.onSuccess { profile ->
+                if (profile != null) {
+                    SessionState.persistRole(context, user.uid, profile.role)
+                    nav.navigate(profile.role.homeRoute()) {
+                        popUpTo(Routes.LOGIN) { inclusive = true }
+                    }
+                } else {
+                    showRoleSelection = true
+                }
+            }.onFailure { errorMessage = it.message ?: "Unable to load your profile." }
+        }
+    }
+
+    val googleLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        loading = false
+        if (result.resultCode != Activity.RESULT_OK) {
+            errorMessage = "Google sign-in was cancelled."
+            return@rememberLauncherForActivityResult
+        }
+        val accountTask = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        runCatching { accountTask.result }
+            .onSuccess { account ->
+                val idToken = account.idToken
+                if (idToken.isNullOrBlank()) {
+                    errorMessage = "Google did not provide an ID token."
+                } else {
+                    loading = true
+                    authRepository.signInWithGoogleIdToken(idToken) { authResult ->
+                        loading = false
+                        authResult.onSuccess(::resolveAuthenticatedUser)
+                            .onFailure { errorMessage = it.message ?: "Google sign-in failed." }
+                    }
+                }
+            }
+            .onFailure { errorMessage = it.message ?: "Google sign-in failed." }
+    }
+
+    LaunchedEffect(Unit) {
+        authRepository.currentUser()?.let(::resolveAuthenticatedUser)
+    }
+
+    if (showRoleSelection && authenticatedUser != null) {
+        RoleSelectionDialog(
+            onRoleSelected = { role ->
+                authenticatedUser?.let { user ->
+                    val now = System.currentTimeMillis().toString()
+                    profileRepository.saveProfile(
+                        User(
+                            uid = user.uid,
+                            name = user.displayName ?: "Kabadiwala Connect user",
+                            phoneNumber = user.phoneNumber.orEmpty(),
+                            email = user.email,
+                            role = role,
+                            createdAt = now,
+                            updatedAt = now
+                        )
+                    ) { saveResult ->
+                        saveResult.onSuccess {
+                            showRoleSelection = false
+                            navigateForRole(role)
+                        }.onFailure {
+                            errorMessage = it.message ?: "Unable to save your role."
+                        }
+                    }
+                }
+            }
+        )
+    }
 
     AuthContainer(
         title = "Welcome back 👋",
@@ -176,38 +288,73 @@ fun LoginScreen(nav: NavHostController) {
             shape = RoundedCornerShape(14.dp)
         )
         Spacer(Modifier.height(18.dp))
-        Text("Sign in as", fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = selectedRole == UserRole.CITIZEN,
-                onClick = { selectedRole = UserRole.CITIZEN },
-                label = { Text("Citizen") }
-            )
-            FilterChip(
-                selected = selectedRole == UserRole.COLLECTOR,
-                onClick = { selectedRole = UserRole.COLLECTOR },
-                label = { Text("Collector") }
-            )
-            FilterChip(
-                selected = selectedRole == UserRole.RECYCLER,
-                onClick = { selectedRole = UserRole.RECYCLER },
-                label = { Text("Recycler") }
-            )
-        }
-        Spacer(Modifier.height(18.dp))
         Button(
             onClick = {
-                SessionState.signInAs(selectedRole)
-                nav.navigate(selectedRole.homeRoute())
+                val currentActivity = activity
+                if (currentActivity == null) {
+                    errorMessage = "Unable to start phone verification."
+                    return@Button
+                }
+                loading = true
+                errorMessage = null
+                authRepository.startPhoneVerification(
+                    currentActivity,
+                    "+91$phone",
+                    onCodeSent = {
+                        verificationId = it
+                        loading = false
+                    },
+                    onVerificationCompleted = {
+                        loading = false
+                        resolveAuthenticatedUser(it)
+                    },
+                    onFailure = {
+                        loading = false
+                        errorMessage = it.message ?: "Phone verification failed."
+                    }
+                )
             },
-            enabled = phone.length >= 10,
+            enabled = phone.length == 10 && !loading && verificationId == null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
             shape = RoundedCornerShape(15.dp)
         ) {
-            Text("Continue")
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            else Text("Continue")
+        }
+        verificationId?.let { id ->
+            Spacer(Modifier.height(14.dp))
+            OutlinedTextField(
+                value = otp,
+                onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) otp = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Enter OTP") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
+            )
+            Spacer(Modifier.height(10.dp))
+            Button(
+                onClick = {
+                    loading = true
+                    authRepository.verifyPhoneCode(id, otp) { authResult ->
+                        loading = false
+                        authResult.onSuccess(::resolveAuthenticatedUser)
+                            .onFailure { errorMessage = it.message ?: "Invalid OTP." }
+                    }
+                },
+                enabled = otp.length == 6 && !loading,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                else Text("Verify OTP")
+            }
+        }
+        errorMessage?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = MaterialTheme.colorScheme.error)
         }
         Spacer(Modifier.height(25.dp))
         Row(
@@ -221,15 +368,26 @@ fun LoginScreen(nav: NavHostController) {
         Spacer(Modifier.height(20.dp))
         OutlinedButton(
             onClick = {
-                SessionState.signInAs(selectedRole)
-                nav.navigate(selectedRole.homeRoute())
+                if (activity == null) {
+                    errorMessage = "Google sign-in is not configured for this build."
+                    return@OutlinedButton
+                }
+                loading = true
+                runCatching { authRepository.googleSignInIntent(context) }
+                    .onSuccess { googleLauncher.launch(it) }
+                    .onFailure {
+                        loading = false
+                        errorMessage = it.message ?: "Google sign-in is not configured."
+                    }
             },
+            enabled = !loading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
             shape = RoundedCornerShape(15.dp)
         ) {
-            Text("Continue with Google")
+            if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            else Text("Continue with Google")
         }
 
         Spacer(Modifier.height(25.dp))
@@ -290,8 +448,9 @@ fun RegisterScreen(nav: NavHostController) {
         Spacer(Modifier.height(22.dp))
         Button(
             onClick = {
-                SessionState.signInAs(UserRole.CITIZEN)
-                nav.navigate(Routes.HOME)
+                nav.navigate(Routes.LOGIN) {
+                    popUpTo(Routes.REGISTER) { inclusive = true }
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -301,6 +460,35 @@ fun RegisterScreen(nav: NavHostController) {
             Text("Create account")
         }
     }
+
+}
+
+@Composable
+private fun RoleSelectionDialog(onRoleSelected: (UserRole) -> Unit) {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Choose your role") },
+        text = { Text("Select how you use Kabadiwala Connect.") },
+        confirmButton = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onRoleSelected(UserRole.CITIZEN) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Citizen") }
+                Button(
+                    onClick = { onRoleSelected(UserRole.COLLECTOR) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Collector / Kabadiwala") }
+                Button(
+                    onClick = { onRoleSelected(UserRole.RECYCLER) },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Recycler") }
+            }
+        }
+    )
 }
 
 @Composable

@@ -19,12 +19,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.compose.ui.platform.LocalContext
+import com.kabadiwalaconnect.data.SessionState
+import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.*
 import com.kabadiwalaconnect.ui.theme.*
 
 @Composable
 fun ProfileScreen(nav: NavHostController) {
+    val context = LocalContext.current
     Scaffold(
         containerColor = Cream,
         topBar = { AppTopBar(nav, "Profile") },
@@ -61,7 +65,13 @@ fun ProfileScreen(nav: NavHostController) {
             }
             item {
                 OutlinedButton(
-                    onClick = { nav.navigate(Routes.LOGIN) },
+                    onClick = {
+                        FirebaseAuthRepository().signOut()
+                        SessionState.clearPersistedSession(context)
+                        nav.navigate(Routes.LOGIN) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp)
                 ) { Text("Log out") }
