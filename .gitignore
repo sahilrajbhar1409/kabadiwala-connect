@@ -1,2 +1,7 @@
 android-app/.idea/
 android-app/local.properties
+
+# Admin panel local files and build output
+admin-panel/node_modules/
+admin-panel/dist/
+admin-panel/.env
