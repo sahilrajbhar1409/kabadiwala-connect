@@ -109,6 +109,7 @@ sealed class Screen(val route: String) {
 
     // Shared
     object Settings : Screen("settings")
+    object Safety : Screen("safety")
     object HelpSupport : Screen("help_support")
     object About : Screen("about")
     object ChangePassword : Screen("change_password")
@@ -687,10 +688,17 @@ fun SampahJujurNavGraph(
                 onTermsClick = {
                     navController.navigate(Screen.TermsAndConditions.route)
                 },
+                onSafetyClick = {
+                    navController.navigate(Screen.Safety.route)
+                },
                 onDeleteAccountClick = {
                     // TODO: Handle delete account
                 }
             )
+        }
+
+        composable(Screen.Safety.route) {
+            SafetyScreen(navController)
         }
 
         // Help & Support Screen
