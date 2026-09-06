@@ -57,7 +57,9 @@ class PickupViewModel(
         materialId: String,
         estimatedWeight: Double,
         estimatedValue: Double,
-        pickupAddress: String
+        pickupAddress: String,
+        latitude: Double,
+        longitude: Double
     ): PickupResult? {
         return try {
             require(materialId.isNotBlank()) { "Select a material." }
@@ -78,8 +80,8 @@ class PickupViewModel(
                 estimatedWeight = estimatedWeight,
                 estimatedValue = estimatedValue,
                 pickupAddress = pickupAddress.trim(),
-                latitude = 0.0,
-                longitude = 0.0,
+                latitude = latitude,
+                longitude = longitude,
                 preferredDate = timestamp.substringBefore("T"),
                 preferredTime = "Any time",
                 status = CollectionRequestStatus.REQUESTED,

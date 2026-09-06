@@ -20,12 +20,15 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.AppTopBar
+import com.kabadiwalaconnect.ui.components.RealTimeMap
+import com.kabadiwalaconnect.ui.components.rememberCurrentLocation
 import com.kabadiwalaconnect.ui.theme.*
 
 @Composable
 fun PickupScreen(nav: NavHostController) {
     var selectedMaterial by remember { mutableStateOf("Paper") }
     var quantity by remember { mutableStateOf("") }
+    val location = rememberCurrentLocation()
 
     Scaffold(
         containerColor = Cream,
@@ -81,6 +84,19 @@ fun PickupScreen(nav: NavHostController) {
                     }
                 }
             }
+                item {
+                    if (location == null) {
+                        Text("Allow location access to use your current pickup location.", color = TextMuted)
+                    } else {
+                        RealTimeMap(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                        )
+                    }
+                }
             item { Text("Preferred time", style = MaterialTheme.typography.titleLarge) }
             item {
                 Row(
