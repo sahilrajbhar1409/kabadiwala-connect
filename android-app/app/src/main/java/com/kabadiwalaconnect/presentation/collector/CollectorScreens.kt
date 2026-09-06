@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,10 +27,12 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,43 +45,51 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import androidx.compose.ui.platform.LocalContext
 import com.kabadiwalaconnect.data.SessionState
-import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
-import com.kabadiwalaconnect.data.model.CollectionRequest
+import com.kabadiwalaconnect.data.api.RetrofitClient
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.repository.CollectionRepositoryProvider
-import com.kabadiwalaconnect.data.repository.PriceServiceProvider
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.AppTopBar
-import com.kabadiwalaconnect.ui.theme.Border
+import com.kabadiwalaconnect.ui.components.RealTimeMap
+import com.kabadiwalaconnect.ui.components.rememberCurrentLocation
 import com.kabadiwalaconnect.ui.theme.Cream
 import com.kabadiwalaconnect.ui.theme.Green
 import com.kabadiwalaconnect.ui.theme.GreenDark
 import com.kabadiwalaconnect.ui.theme.GreenLight
 import com.kabadiwalaconnect.ui.theme.TextMuted
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 private const val RECYCLER_ID = "recycler-session"
 
 @Composable
 fun CollectorDashboardScreen(nav: NavHostController) {
+    val context = LocalContext.current
+    val backend = remember { RetrofitClient.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
+    LaunchedEffect(Unit) {
+        backend.dashboard("collector").onFailure { backend.logFailure("collector dashboard", it) }
+        backend.lots(status = "OPEN").onFailure { backend.logFailure("collector lots", it) }
+    }
     val pending = repository.getPendingCollectionRequests().size
     val collectorLots = repository.getCollectorLots(SessionState.COLLECTOR_ID)
     val accepted = collectorLots.count { it.status == LotStatus.ACCEPTED }
@@ -385,58 +396,165 @@ private fun ActivePickupCard(lot: Lot, nav: NavHostController, onChanged: () -> 
 
 @Composable
 fun CollectorHandoverScreen(nav: NavHostController, lotId: String?) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val repository = remember { CollectionRepositoryProvider.instance }
+    val backend = remember { RetrofitClient.create(context) }
     val lot = lotId?.let { repository.getLot(it) }
     var recycler by remember { mutableStateOf(RECYCLER_ID) }
-    var location by remember { mutableStateOf("") }
+    var manualLocation by remember { mutableStateOf("") }
+    var useManualLocation by remember { mutableStateOf(false) }
     var weightText by remember(lot?.lotId) { mutableStateOf(lot?.actualWeight?.toString() ?: "") }
     var valueText by remember(lot?.lotId) { mutableStateOf(lot?.actualValue?.toString() ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    val location = rememberCurrentLocation()
     val weight = weightText.toDoubleOrNull()
     val value = valueText.toDoubleOrNull()
 
     Scaffold(containerColor = Cream, topBar = { AppTopBar(nav, "Recycler handover") }) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(20.dp),
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (lot == null) {
-                EmptyCollectorMessage("Collected lot not found.")
-                return@Column
+                item { EmptyCollectorMessage("Collected lot not found.") }
+                return@LazyColumn
             }
-            Text("Confirm actual values", style = MaterialTheme.typography.headlineSmall)
-            Text("Lot ${lot.lotId}", color = TextMuted)
-            OutlinedTextField(weightText, { weightText = it }, label = { Text("Actual weight (kg)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-            OutlinedTextField(valueText, { valueText = it }, label = { Text("Final earnings (₹)") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-            OutlinedTextField(recycler, { recycler = it }, label = { Text("Recycler name or ID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(location, { location = it }, label = { Text("Handover location") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            if (error != null) Text(error!!, color = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.weight(1f))
-            Button(
-                onClick = {
-                    if (weight == null || value == null || weight <= 0 || value < 0 || recycler.isBlank() || location.isBlank()) {
-                        error = "Enter valid weight, value, recycler and location."
-                    } else {
-                        try {
-                            repository.recordHandover(
-                                lot.lotId,
-                                SessionState.COLLECTOR_ID,
-                                recycler,
-                                location,
-                                weight,
-                                value
-                            )
-                            nav.navigate(Routes.COLLECTOR_EARNINGS) {
-                                popUpTo(Routes.COLLECTOR_DASHBOARD)
-                            }
-                        } catch (exception: Exception) {
-                            error = exception.message ?: "Unable to save handover."
+            item { Text("Confirm actual values", style = MaterialTheme.typography.headlineSmall) }
+            item { Text("Lot ${lot.lotId}", color = TextMuted) }
+            item {
+                OutlinedTextField(
+                    weightText,
+                    { weightText = it },
+                    label = { Text("Actual weight (kg)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp)
+                )
+            }
+            item {
+                OutlinedTextField(
+                    valueText,
+                    { valueText = it },
+                    label = { Text("Final earnings (₹)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(14.dp)
+                )
+            }
+            item {
+                OutlinedTextField(
+                    recycler,
+                    { recycler = it },
+                    label = { Text("Recycler name or ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
+                )
+            }
+            
+            // Handover location with GPS + manual fallback
+            item { Text("Handover location", style = MaterialTheme.typography.titleMedium) }
+            item {
+                if (location != null && !useManualLocation) {
+                    RealTimeMap(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(150.dp)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { useManualLocation = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        Text("Enter location manually", color = Green)
+                    }
+                } else {
+                    OutlinedTextField(
+                        manualLocation,
+                        { manualLocation = it },
+                        label = { Text("Handover address") },
+                        placeholder = { Text("e.g., Recycling facility, Warehouse") },
+                        leadingIcon = { Icon(Icons.Default.LocationOn, null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    if (location != null) {
+                        TextButton(onClick = { useManualLocation = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                            Text("Use GPS location", color = Green)
                         }
                     }
-                },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(13.dp)
-            ) { Text("Save handover", fontWeight = FontWeight.Bold) }
+                }
+            }
+            
+            if (error != null) {
+                item {
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                        Text(
+                            error ?: "",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+            
+            item { Spacer(Modifier.height(8.dp)) }
+            item {
+                Button(
+                    onClick = {
+                        // Validate inputs
+                        if (weight == null || value == null || weight <= 0 || value < 0 || recycler.isBlank()) {
+                            error = "Enter valid weight, value, and recycler."
+                            return@Button
+                        }
+                        
+                        val address = if (location != null && !useManualLocation) {
+                            "GPS: ${location.latitude}, ${location.longitude}"
+                        } else {
+                            manualLocation.trim()
+                        }
+                        
+                        if (address.isEmpty()) {
+                            error = "Please provide a handover location."
+                            return@Button
+                        }
+                        
+                        saving = true
+                        scope.launch {
+                            try {
+                                // Save locally first
+                                repository.recordHandover(
+                                    lot.lotId,
+                                    SessionState.COLLECTOR_ID,
+                                    recycler,
+                                    address,
+                                    weight,
+                                    value
+                                )
+                                error = null
+                                nav.navigate(Routes.COLLECTOR_EARNINGS) {
+                                    popUpTo(Routes.COLLECTOR_DASHBOARD)
+                                }
+                            } catch (exception: Exception) {
+                                error = exception.message ?: "Unable to save handover."
+                                saving = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                    shape = RoundedCornerShape(13.dp),
+                    enabled = !saving
+                ) {
+                    if (saving) CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    else Text("Save handover", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

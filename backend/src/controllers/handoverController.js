@@ -40,10 +40,16 @@ const createHandoverHandler = asyncHandler(async (req, res) => {
 const getHandover = asyncHandler(async (req, res) => {
   const handover = await Handover.findById(req.params.id).populate('lot').populate('transaction');
   if (!handover) throw new ApiError(404, 'Handover not found');
+<<<<<<< HEAD
   if (req.user.role !== 'admin') {
     const transaction = handover.transaction;
     const involved = [transaction.collector.toString(), transaction.recycler.toString()];
     if (!involved.includes(req.user._id.toString())) throw new ApiError(403, 'Not allowed');
+=======
+  const involved = [handover.transaction.collector.toString(), handover.transaction.recycler.toString()];
+  if (req.user.role !== 'admin' && !involved.includes(req.user._id.toString())) {
+    throw new ApiError(403, 'Not allowed');
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
   }
   return success(res, { message: 'Handover', data: handover });
 });

@@ -23,6 +23,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.melodi.sampahjujur.model.ScrapMaterial
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.mutableStateOf
+import com.melodi.sampahjujur.ui.components.ImagePicker
 import com.melodi.sampahjujur.ui.theme.*
 import com.melodi.sampahjujur.viewmodel.CollectionViewModel
 
@@ -34,6 +37,8 @@ fun CreateCollectionRequestScreen(
     onLotCreated: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    var selectedPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(uiState.errorMessage) {
@@ -270,7 +275,7 @@ fun CreateCollectionRequestScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column {
-                                Text("Quoted Valuation", fontSize = 12.sp, color = TextSecondary)
+                                Text("Preview valuation", fontSize = 12.sp, color = TextSecondary)
                                 Text(
                                     text = "₹${String.format("%,.2f", calculatedValue)}",
                                     fontSize = 20.sp,
@@ -279,7 +284,7 @@ fun CreateCollectionRequestScreen(
                                 )
                             }
                             Text(
-                                text = "(${weightVal} kg × ₹${currentRate.toInt()})",
+                                text = "Preview only; final value uses the backend price",
                                 fontSize = 12.sp,
                                 color = MediumGray
                             )
@@ -340,6 +345,23 @@ fun CreateCollectionRequestScreen(
 
             // Optional Notes
             item {
+                ImagePicker(
+                    imageUri = selectedPhotoUri,
+                    onImageSelected = { uri ->
+                        viewModel.addPhoto(uri)
+                        selectedPhotoUri = null
+                    },
+                    onImageRemoved = {
+                        selectedPhotoUri = null
+                        viewModel.removeLastPhoto()
+                    }
+                )
+                if (uiState.selectedPhotoUris.isNotEmpty()) {
+                    Text("${uiState.selectedPhotoUris.size}/6 photos selected", color = PrimaryGreen)
+                }
+            }
+
+            item {
                 OutlinedTextField(
                     value = uiState.inputNotes,
                     onValueChange = { viewModel.setInputNotes(it) },
@@ -358,7 +380,7 @@ fun CreateCollectionRequestScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
-                        viewModel.createCollectionRequest { lotId ->
+                        viewModel.createCollectionRequest(context) { lotId ->
                             onLotCreated(lotId)
                         }
                     },

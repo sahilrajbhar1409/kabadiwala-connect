@@ -11,7 +11,12 @@ const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
 const { notify } = require('../utils/notify');
 const RecyclerProfile = require('../models/RecyclerProfile');
+<<<<<<< HEAD
 const { analyzeScrap } = require('../services/aiService');
+=======
+const { sanitizeForRecycler } = require('../utils/locationPrivacy');
+const { analyzeLot } = require('../services/aiService');
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
 
 const formatLot = (lot, { redactRecyclerLocation = false } = {}) => {
   const obj = lot.toObject ? lot.toObject() : lot;
@@ -34,6 +39,7 @@ const formatLot = (lot, { redactRecyclerLocation = false } = {}) => {
   return formatted;
 };
 
+
 const createLot = asyncHandler(async (req, res) => {
   const weight = Number(req.body.approximateWeight);
   const category = req.body.materialCategory;
@@ -53,11 +59,26 @@ const createLot = asyncHandler(async (req, res) => {
     location: req.body.location?.city || req.body.city,
   });
 
+<<<<<<< HEAD
   const uploadedPhotos = await persistUploadedFiles(req.files || []);
   const referencedPhotos = Array.isArray(req.body.photos)
     ? req.body.photos.filter((photo) => typeof photo === 'string' && /^https?:\/\//i.test(photo))
     : [];
   const photos = [...uploadedPhotos, ...referencedPhotos];
+=======
+  // Handle photos from either multipart upload OR pre-uploaded URLs in request body
+  let photos = [];
+  
+  if (req.files && req.files.length > 0) {
+    // Process multipart file uploads
+    photos = await persistUploadedFiles(req.files);
+  } else if (req.body.photos && Array.isArray(req.body.photos)) {
+    // Use pre-uploaded URLs from request body
+    // This allows clients (like Android) to upload to Cloudinary first, then pass URLs
+    photos = req.body.photos.filter(url => typeof url === 'string' && url.trim().length > 0);
+  }
+  
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
   const location = req.body.location
     ? (typeof req.body.location === 'string' ? JSON.parse(req.body.location) : req.body.location)
     : {
@@ -89,6 +110,20 @@ const createLot = asyncHandler(async (req, res) => {
     status: req.body.status === 'DRAFT' ? 'DRAFT' : 'OPEN',
     clientGeneratedId: req.body.clientGeneratedId || null,
   });
+
+  if (photos.length) {
+    try {
+      lot.aiAnalysis = await analyzeLot({
+        photoUrl: photos[0],
+        weight,
+        actualPrice: quote.estimatedValue,
+      });
+      if (lot.aiAnalysis) await lot.save();
+    } catch (error) {
+      lot.aiAnalysis = { status: 'UNAVAILABLE', message: error.message };
+      await lot.save();
+    }
+  }
 
   const matches = await matchRecyclersForLot(lot);
   if (matches.length) {
@@ -169,12 +204,21 @@ const listLots = asyncHandler(async (req, res) => {
     lots = await Lot.find(filter).populate('collector', 'name phone generalLocation').sort({ createdAt: -1 });
   }
 
+<<<<<<< HEAD
   return success(res, {
     message: 'Lots',
     data: lots.map((lot) => formatLot(lot, {
       redactRecyclerLocation: req.user.role === 'recycler',
     })),
   });
+=======
+  // Apply privacy rules for recyclers: sanitize location data before offer acceptance
+  if (req.user.role === 'recycler') {
+    lots = await Promise.all(lots.map(lot => sanitizeForRecycler(lot, req.user._id)));
+  }
+
+  return success(res, { message: 'Lots', data: lots.map(formatLot) });
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
 });
 
 const myLots = asyncHandler(async (req, res) => {
@@ -188,6 +232,7 @@ const getLot = asyncHandler(async (req, res) => {
   if (req.user.role === 'collector' && lot.collector._id.toString() !== req.user._id.toString()) {
     throw new ApiError(403, 'Not your lot');
   }
+<<<<<<< HEAD
   let redactRecyclerLocation = false;
   if (req.user.role === 'recycler') {
     const acceptedOffer = await Offer.findOne({
@@ -198,6 +243,16 @@ const getLot = asyncHandler(async (req, res) => {
     redactRecyclerLocation = !acceptedOffer;
   }
   return success(res, { message: 'Lot', data: formatLot(lot, { redactRecyclerLocation }) });
+=======
+  
+  // Apply privacy rules for recyclers: sanitize location data before offer acceptance
+  let sanitized = lot;
+  if (req.user.role === 'recycler') {
+    sanitized = await sanitizeForRecycler(lot, req.user._id);
+  }
+  
+  return success(res, { message: 'Lot', data: formatLot(sanitized) });
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
 });
 
 const updateLot = asyncHandler(async (req, res) => {

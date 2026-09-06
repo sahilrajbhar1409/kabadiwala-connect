@@ -10,6 +10,7 @@ const { createHandover } = require('../services/handoverService');
 const asyncHandler = require('../utils/asyncHandler');
 const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
+const { sanitizeForRecycler } = require('../utils/locationPrivacy');
 
 const findByAnyReference = async (referenceId) => {
   const lot = await Lot.findOne({ lotNumber: referenceId });
@@ -33,8 +34,16 @@ const getTrace = asyncHandler(async (req, res) => {
   if (!found?.lot) throw new ApiError(404, 'Reference not found');
 
   const lot = found.lot;
-  const offers = await Offer.find({ lot: lot._id }).populate('recycler', 'name phone');
   const transaction = await Transaction.findOne({ lot: lot._id });
+  const isCollector = lot.collector.toString() === req.user._id.toString();
+  const isRecycler = transaction && transaction.recycler.toString() === req.user._id.toString();
+  if (req.user.role !== 'admin' && !isCollector && !isRecycler) {
+    throw new ApiError(403, 'Not allowed');
+  }
+  const visibleLot = req.user.role === 'recycler'
+    ? await sanitizeForRecycler(lot, req.user._id)
+    : lot;
+  const offers = await Offer.find({ lot: lot._id }).populate('recycler', 'name phone');
   const handover = transaction ? await Handover.findOne({ transaction: transaction._id }) : null;
   const payment = transaction ? await Payment.findOne({ transaction: transaction._id }) : null;
 
@@ -47,6 +56,24 @@ const getTrace = asyncHandler(async (req, res) => {
       detail: `${lot.materialCategory} · ${lot.approximateWeight}${lot.weightUnit}`,
     },
   ];
+  if (lot.photos?.length) {
+    timeline.push({
+      step: 'PHOTOS',
+      at: lot.createdAt,
+      reference: lot.lotNumber,
+      status: 'RECORDED',
+      detail: `${lot.photos.length} lot photo(s) recorded`,
+    });
+  }
+  if (lot.status !== 'OPEN' && lot.status !== 'DRAFT') {
+    timeline.push({
+      step: 'MATCHED',
+      at: offers[0]?.createdAt || lot.createdAt,
+      reference: lot.lotNumber,
+      status: 'MATCHED',
+      detail: 'Recycler matching completed',
+    });
+  }
   offers.forEach((offer) => {
     timeline.push({
       step: 'OFFER',
@@ -55,6 +82,15 @@ const getTrace = asyncHandler(async (req, res) => {
       status: offer.status,
       detail: `₹${offer.quotedPrice} by ${offer.recycler?.name || 'recycler'}`,
     });
+    if (offer.status === 'ACCEPTED' || offer.status === 'REJECTED') {
+      timeline.push({
+        step: offer.status === 'ACCEPTED' ? 'OFFER_ACCEPTED' : 'OFFER_REJECTED',
+        at: offer.updatedAt || offer.createdAt,
+        reference: offer.offerNumber,
+        status: offer.status,
+        detail: `Offer decision for ${lot.lotNumber}`,
+      });
+    }
   });
   if (transaction) {
     timeline.push({
@@ -73,6 +109,33 @@ const getTrace = asyncHandler(async (req, res) => {
       status: handover.verificationStatus,
       detail: `${handover.weight} kg · collector ${handover.collectorConfirmation ? 'yes' : 'no'} / recycler ${handover.recyclerConfirmation ? 'yes' : 'no'}`,
     });
+    if (handover.collectorConfirmation) {
+      timeline.push({
+        step: 'COLLECTOR_CONFIRMATION',
+        at: handover.collectorConfirmedAt || handover.updatedAt || handover.createdAt,
+        reference: handover.handoverReference,
+        status: 'CONFIRMED',
+        detail: 'Collector confirmed handover',
+      });
+    }
+    if (handover.recyclerConfirmation) {
+      timeline.push({
+        step: 'RECYCLER_CONFIRMATION',
+        at: handover.recyclerConfirmedAt || handover.updatedAt || handover.createdAt,
+        reference: handover.handoverReference,
+        status: 'CONFIRMED',
+        detail: 'Recycler confirmed handover',
+      });
+    }
+    if (handover.verificationStatus === 'VERIFIED') {
+      timeline.push({
+        step: 'VERIFIED',
+        at: handover.updatedAt || handover.createdAt,
+        reference: handover.handoverReference,
+        status: 'VERIFIED',
+        detail: 'Collector and recycler confirmations verified',
+      });
+    }
   }
   if (payment) {
     timeline.push({
@@ -88,7 +151,7 @@ const getTrace = asyncHandler(async (req, res) => {
 
   return success(res, {
     message: 'Traceability chain',
-    data: { lot, offers, transaction, handover, payment, timeline },
+    data: { lot: visibleLot, offers, transaction, handover, payment, timeline },
   });
 });
 

@@ -33,14 +33,24 @@ const createPayment = asyncHandler(async (req, res) => {
     transaction.finalAmount = amount;
     await transaction.save();
     await Lot.findByIdAndUpdate(transaction.lot, { status: 'COMPLETED' });
-    await notify({
-      user: transaction.collector,
-      title: 'Payment recorded',
-      message: `₹${amount} recorded for transaction ${transaction.transactionReference}.`,
-      type: 'PAYMENT_RECEIVED',
-      relatedEntityId: payment._id.toString(),
-    });
   }
+
+  await Promise.all([
+    notify({
+      user: transaction.collector,
+      title: 'Payment updated',
+      message: `₹${amount} ${payment.paymentStatus.toLowerCase()} for transaction ${transaction.transactionReference}.`,
+      type: payment.paymentStatus === 'PAID' ? 'PAYMENT_RECEIVED' : 'PAYMENT_UPDATED',
+      relatedEntityId: payment._id.toString(),
+    }),
+    notify({
+      user: transaction.recycler,
+      title: 'Payment updated',
+      message: `₹${amount} ${payment.paymentStatus.toLowerCase()} for transaction ${transaction.transactionReference}.`,
+      type: payment.paymentStatus === 'PAID' ? 'PAYMENT_RECEIVED' : 'PAYMENT_UPDATED',
+      relatedEntityId: payment._id.toString(),
+    }),
+  ]);
 
   return success(res, { status: 201, message: 'Payment recorded', data: payment });
 });
@@ -56,7 +66,12 @@ const listPayments = asyncHandler(async (req, res) => {
 const getPayment = asyncHandler(async (req, res) => {
   const row = await Payment.findById(req.params.id).populate('transaction');
   if (!row) throw new ApiError(404, 'Payment not found');
+<<<<<<< HEAD
   if (req.user.role !== 'admin' && ![row.collector.toString(), row.recycler.toString()].includes(req.user._id.toString())) {
+=======
+  const involved = [row.collector.toString(), row.recycler.toString()];
+  if (req.user.role !== 'admin' && !involved.includes(req.user._id.toString())) {
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
     throw new ApiError(403, 'Not allowed');
   }
   return success(res, { message: 'Payment', data: row });

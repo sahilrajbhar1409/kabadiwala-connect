@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,7 +35,17 @@ data class CollectionEarningsSummary(
 )
 
 private fun currentBackendCategory(category: String?): String =
-    category?.trim()?.takeIf { it.isNotEmpty() }?.uppercase()?.replace(' ', '_') ?: "MIXED_PLASTICS"
+    when (category?.trim()?.uppercase()) {
+        "CRT" -> "CRT"
+        "LCD" -> "LCD_PANEL"
+        "PCB" -> "PCB"
+        "CABLES", "CABLE" -> "CABLE"
+        "BATTERIES", "BATTERY" -> "BATTERY"
+        "MOTORS", "MOTOR" -> "MOTOR"
+        "MAGNETS", "MAGNET_ASSEMBLY" -> "MAGNET_ASSEMBLY"
+        "MIXED PLASTICS", "MIXED_PLASTICS", "MIXED_PLASTIC" -> "MIXED_PLASTIC"
+        else -> "OTHER"
+    }
 
 private fun Map<String, Any?>.backendLotNumber(): String? {
     val lot = this["lot"] as? Map<*, *> ?: this
@@ -76,6 +88,7 @@ private fun Map<String, Any?>.referencesLot(lotId: String): Boolean {
     ).any { it?.toString() == lotId }
 }
 
+<<<<<<< HEAD
 private fun Map<String, Any?>.backendObjectId(): String? =
     (this["id"] ?: this["_id"])?.toString()
 
@@ -97,6 +110,27 @@ private fun Any?.backendDouble(): Double = when (this) {
 private fun Any?.backendTimestamp(): Long =
     toString().let { value -> runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(System.currentTimeMillis()) }
 
+=======
+private fun Map<*, *>.traceTimestamp(): Long = when (val raw = this["at"]) {
+    is Number -> raw.toLong()
+    is String -> listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX")
+        .asSequence()
+        .mapNotNull { pattern -> runCatching { SimpleDateFormat(pattern, Locale.US).parse(raw)?.time }.getOrNull() }
+        .firstOrNull() ?: 0L
+    else -> 0L
+}
+
+private fun Map<*, *>.traceStage(): CollectionStatus = when (this["step"]?.toString()) {
+    "MATCHED", "OFFER" -> CollectionStatus.RECYCLER_ASSIGNED
+    "OFFER_ACCEPTED" -> CollectionStatus.ACCEPTED
+    "OFFER_REJECTED" -> CollectionStatus.REJECTED
+    "TRANSACTION" -> CollectionStatus.ACCEPTED
+    "HANDOVER", "COLLECTOR_CONFIRMATION", "RECYCLER_CONFIRMATION", "VERIFIED" -> CollectionStatus.HANDED_OVER
+    "PAYMENT" -> if (this["status"]?.toString() == "PAID") CollectionStatus.COMPLETED else CollectionStatus.PAYMENT_PENDING
+    else -> CollectionStatus.CREATED
+}
+
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
 /**
  * Primary repository for Person 4 (SIH 26229: Kabadiwala Connect).
  * Implements offline-first collection request creation, Lot ID generation,
@@ -134,7 +168,11 @@ class CollectionRepository @Inject constructor(
         approximateWeight: Double,
         quotedPrice: Double,
         notes: String = "",
+<<<<<<< HEAD
         photoReferences: List<String> = emptyList()
+=======
+        photos: List<String> = emptyList()
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
     ): Result<CollectionRequest> {
         return try {
             val localLotId = LotIdGenerator.generateLotId()
@@ -190,7 +228,11 @@ class CollectionRepository @Inject constructor(
                         latitude = lat,
                         longitude = lng,
                         notes = notes,
+<<<<<<< HEAD
                         photos = photoReferences.filter { it.isNotBlank() }.distinct()
+=======
+                        photos = photos
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
                     )
                 )
                 backendResult.exceptionOrNull()?.let {
@@ -1077,6 +1119,7 @@ class CollectionRepository @Inject constructor(
                 timeline = timeline
             )
 
+<<<<<<< HEAD
             val backendTimeline = backendApiRepository.trace(lotId).getOrNull()
                 ?.get("timeline") as? List<*>
             val mappedBackendTimeline = backendTimeline?.mapNotNull { raw ->
@@ -1107,6 +1150,24 @@ class CollectionRepository @Inject constructor(
             }
 
             Result.success(chain)
+=======
+            // Prefer the authenticated backend audit timeline when online; retain the local chain offline.
+            val backendTimeline = backendApiRepository.trace(lotId).getOrNull()
+                ?.get("timeline") as? List<*>
+            val onlineTimeline = backendTimeline.orEmpty().mapNotNull { item ->
+                val event = item as? Map<*, *> ?: return@mapNotNull null
+                TraceabilityEvent(
+                    stage = event.traceStage(),
+                    title = event["step"]?.toString() ?: "Traceability event",
+                    description = event["detail"]?.toString().orEmpty(),
+                    timestamp = event.traceTimestamp(),
+                    location = "",
+                    isCompleted = true
+                )
+            }.sortedBy { it.timestamp }
+
+            Result.success(if (onlineTimeline.isEmpty()) chain else chain.copy(timeline = onlineTimeline))
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trace Lot: $lotId", e)
             Result.failure(e)

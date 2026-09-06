@@ -13,13 +13,21 @@ function parseQueryParams(req) {
   let fromDate = null;
   let toDate = null;
 
+  const parseDate = (value, endOfDay = false) => {
+    const date = new Date(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value) && endOfDay) {
+      date.setHours(23, 59, 59, 999);
+    }
+    return date;
+  };
+
   if (from) {
-    fromDate = new Date(from);
+    fromDate = parseDate(from);
     if (isNaN(fromDate.getTime())) throw new ApiError(400, 'Invalid from date format');
   }
 
   if (to) {
-    toDate = new Date(to);
+    toDate = parseDate(to, true);
     if (isNaN(toDate.getTime())) throw new ApiError(400, 'Invalid to date format');
   }
 

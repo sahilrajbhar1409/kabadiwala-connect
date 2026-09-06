@@ -38,8 +38,13 @@ import com.melodi.sampahjujur.data.local.entity.PriceEntity
         TransactionEntity::class,
         PickupRequestEntity::class,
         CollectionRequestEntity::class,
+<<<<<<< HEAD
         HandoverRecordEntity::class,
         PriceEntity::class
+=======
+        HandoverRecordEntity::class
+        ,PriceEntity::class
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
     ],
     version = 4,
     exportSchema = false

@@ -9,6 +9,9 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import okhttp3.MultipartBody
+import retrofit2.http.Multipart
+import retrofit2.http.Part
 
 data class BackendEnvelope<T>(
     val success: Boolean = false,
@@ -173,6 +176,10 @@ data class BackendSyncItem(
 )
 
 interface BackendApiService {
+    @Multipart
+    @POST("uploads")
+    suspend fun uploadImages(@Part photos: List<MultipartBody.Part>): Response<BackendEnvelope<Map<String, Any?>>>
+
     @POST("auth/register")
     suspend fun register(@Body request: BackendRegisterRequest): Response<BackendEnvelope<BackendAuthData>>
 

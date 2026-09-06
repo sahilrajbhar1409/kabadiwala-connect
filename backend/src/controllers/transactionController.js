@@ -23,9 +23,15 @@ const getTransaction = asyncHandler(async (req, res) => {
     .populate('collector', 'name phone')
     .populate('recycler', 'name phone');
   if (!row) throw new ApiError(404, 'Transaction not found');
+<<<<<<< HEAD
   if (req.user.role !== 'admin') {
     const involved = [row.collector._id.toString(), row.recycler._id.toString()];
     if (!involved.includes(req.user._id.toString())) throw new ApiError(403, 'Not allowed');
+=======
+  const involved = [row.collector._id.toString(), row.recycler._id.toString()];
+  if (req.user.role !== 'admin' && !involved.includes(req.user._id.toString())) {
+    throw new ApiError(403, 'Not allowed');
+>>>>>>> f8f13893033af90e6bddcbdb82ab63c12f831ffd
   }
   return success(res, { message: 'Transaction', data: row });
 });

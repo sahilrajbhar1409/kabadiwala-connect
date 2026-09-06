@@ -48,6 +48,7 @@ const lotSchema = new mongoose.Schema(
       min: { type: Number, default: 0 },
       max: { type: Number, default: 0 },
     },
+    aiAnalysis: { type: mongoose.Schema.Types.Mixed, default: null },
     location: { type: locationSchema, default: () => ({}) },
     notes: { type: String, default: '' },
     status: { type: String, enum: LOT_STATUSES, default: 'OPEN' },

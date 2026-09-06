@@ -15,6 +15,8 @@ const handoverSchema = new mongoose.Schema(
     },
     collectorConfirmation: { type: Boolean, default: false },
     recyclerConfirmation: { type: Boolean, default: false },
+    collectorConfirmedAt: { type: Date, default: null },
+    recyclerConfirmedAt: { type: Date, default: null },
     verificationStatus: {
       type: String,
       enum: ['PENDING', 'PARTIAL', 'VERIFIED'],

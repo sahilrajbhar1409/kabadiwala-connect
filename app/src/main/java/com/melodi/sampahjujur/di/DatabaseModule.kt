@@ -101,6 +101,10 @@ object DatabaseModule {
         return database.collectionRequestDao()
     }
 
+    @Provides
+    @Singleton
+    fun providePriceDao(database: SampahJujurDatabase): PriceDao = database.priceDao()
+
     /**
      * Person 4: Provides HandoverRecordDao for handover record operations
      */
