@@ -54,9 +54,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.kabadiwalaconnect.data.SessionState
 import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
-import com.kabadiwalaconnect.data.backend.BackendNetwork
-import com.kabadiwalaconnect.data.backend.BackendHandoverRequest
-import com.kabadiwalaconnect.data.backend.BackendPaymentRequest
+import com.kabadiwalaconnect.data.api.RetrofitClient
+import com.kabadiwalaconnect.data.api.HandoverRequest
+import com.kabadiwalaconnect.data.api.PaymentRequest
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.model.PaymentMethod
@@ -79,7 +79,7 @@ private val recyclerId: String
 @Composable
 fun RecyclerDashboardScreen(nav: NavHostController) {
     val context = LocalContext.current
-    val backend = remember { BackendNetwork.create(context) }
+    val backend = remember { RetrofitClient.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
     LaunchedEffect(Unit) {
         backend.dashboard("recycler").onFailure { backend.logFailure("recycler dashboard", it) }
@@ -247,7 +247,7 @@ private fun RecyclerLotCard(lot: Lot, onOpen: () -> Unit) {
 fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val backend = remember { BackendNetwork.create(context) }
+    val backend = remember { RetrofitClient.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
     var lot by remember(lotId) { mutableStateOf(lotId?.let(repository::getLot)) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -295,7 +295,7 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                                             }
                                             if (transactionId != null) {
                                                 backend.createHandover(
-                                                    BackendHandoverRequest(
+                                                    HandoverRequest(
                                                         transactionId = transactionId,
                                                         weight = current.actualWeight ?: current.estimatedWeight,
                                                         address = current.handoverLocation.orEmpty()
@@ -342,7 +342,7 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                                             }
                                             if (transactionId != null) {
                                                 backend.createPayment(
-                                                    BackendPaymentRequest(
+                                                    PaymentRequest(
                                                         transactionId = transactionId,
                                                         amount = current.actualValue ?: current.estimatedValue,
                                                         paymentMethod = paymentMethod.name

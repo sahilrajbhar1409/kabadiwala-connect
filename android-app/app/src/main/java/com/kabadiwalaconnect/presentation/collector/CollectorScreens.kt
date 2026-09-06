@@ -60,7 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import com.kabadiwalaconnect.data.SessionState
 import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
-import com.kabadiwalaconnect.data.backend.BackendNetwork
+import com.kabadiwalaconnect.data.api.RetrofitClient
 import com.kabadiwalaconnect.data.model.CollectionRequest
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
@@ -81,7 +81,7 @@ private const val RECYCLER_ID = "recycler-session"
 @Composable
 fun CollectorDashboardScreen(nav: NavHostController) {
     val context = LocalContext.current
-    val backend = remember { BackendNetwork.create(context) }
+    val backend = remember { RetrofitClient.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
     LaunchedEffect(Unit) {
         backend.dashboard("collector").onFailure { backend.logFailure("collector dashboard", it) }

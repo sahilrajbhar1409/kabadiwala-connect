@@ -20,7 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.kabadiwalaconnect.data.backend.BackendNetwork
+import com.kabadiwalaconnect.data.api.RetrofitClient
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.AppTopBar
 import com.kabadiwalaconnect.ui.components.RealTimeMap
@@ -33,7 +33,7 @@ fun PickupScreen(nav: NavHostController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val viewModel = remember {
-        PickupViewModel(backendRepository = BackendNetwork.create(context))
+        PickupViewModel(backendRepository = RetrofitClient.create(context))
     }
     var selectedMaterial by remember { mutableStateOf("Paper") }
     var quantity by remember { mutableStateOf("") }

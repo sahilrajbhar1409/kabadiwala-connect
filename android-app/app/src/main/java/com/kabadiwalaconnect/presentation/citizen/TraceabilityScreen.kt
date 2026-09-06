@@ -22,7 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
-import com.kabadiwalaconnect.data.backend.BackendNetwork
+import com.kabadiwalaconnect.data.api.RetrofitClient
 import androidx.navigation.NavHostController
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.repository.PriceServiceProvider
@@ -38,7 +38,7 @@ import java.util.Locale
 fun TraceabilityScreen(nav: NavHostController, lotId: String? = null) {
     val context = LocalContext.current
     val state = remember(lotId) { TraceabilityViewModel().load(lotId) }
-    val backend = remember { BackendNetwork.create(context) }
+    val backend = remember { RetrofitClient.create(context) }
     LaunchedEffect(state.lot?.lotId) {
         state.lot?.lotId?.let {
             backend.trace(it).onFailure { error -> backend.logFailure("traceability", error) }

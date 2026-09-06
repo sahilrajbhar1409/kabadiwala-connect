@@ -4,8 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.kabadiwalaconnect.data.SessionState
-import com.kabadiwalaconnect.data.backend.BackendApiRepository
-import com.kabadiwalaconnect.data.backend.BackendCreateLotRequest
+import com.kabadiwalaconnect.data.api.BackendApiClient
+import com.kabadiwalaconnect.data.api.CreateLotRequest
 import com.kabadiwalaconnect.data.model.AiPrediction
 import com.kabadiwalaconnect.data.model.CollectionRequest
 import com.kabadiwalaconnect.data.model.CollectionRequestStatus
@@ -32,7 +32,7 @@ data class PickupResult(
 class PickupViewModel(
     private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
     private val aiService: AiDemoService = AiDemoServiceProvider.instance,
-    private val backendRepository: BackendApiRepository? = null
+    private val backendRepository: BackendApiClient? = null
 ) {
     var prediction by mutableStateOf<AiPrediction?>(null)
         private set
@@ -139,7 +139,7 @@ class PickupViewModel(
         val backend = backendRepository
         if (backend != null) {
             val response = backend.createLot(
-                BackendCreateLotRequest(
+                CreateLotRequest(
                     materialCategory = materialId.uppercase().replace(' ', '_'),
                     materialDescription = "Pickup request from Kabadiwala Connect",
                     approximateWeight = estimatedWeight,
