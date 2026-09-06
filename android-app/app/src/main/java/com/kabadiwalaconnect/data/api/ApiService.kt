@@ -49,7 +49,8 @@ data class CreateLotRequest(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val notes: String = "",
-    val clientGeneratedId: String? = null
+    val clientGeneratedId: String? = null,
+    val photos: List<String> = emptyList()
 )
 data class CreateOfferRequest(
     val lotId: String,

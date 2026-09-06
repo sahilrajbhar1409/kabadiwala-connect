@@ -20,6 +20,40 @@ const formatLot = (lot) => {
   };
 };
 
+/**
+ * Sanitize lot data for recyclers based on privacy rules:
+ * - Before offer acceptance: hide precise coordinates (latitude/longitude)
+ * - Show only general location (address/city)
+ * - After acceptance: allow access to full location details
+ */
+const sanitizeForRecycler = async (lot, recycler) => {
+  if (!recycler) return lot;
+  
+  // Check if recycler has accepted an offer on this lot
+  const Offer = require('../models/Offer');
+  const acceptedOffer = await Offer.findOne({
+    lot: lot._id,
+    recycler: recycler,
+    status: 'ACCEPTED'
+  });
+  
+  // If recycler has accepted, show full location
+  if (acceptedOffer) {
+    return lot;
+  }
+  
+  // Before acceptance, remove precise coordinates for privacy
+  const sanitized = lot.toObject ? lot.toObject() : lot;
+  if (sanitized.location) {
+    sanitized.location = {
+      address: sanitized.location.address || '',
+      city: sanitized.location.city || ''
+      // latitude and longitude intentionally omitted
+    };
+  }
+  return sanitized;
+};
+
 const createLot = asyncHandler(async (req, res) => {
   const weight = Number(req.body.approximateWeight);
   const category = req.body.materialCategory;
@@ -39,7 +73,18 @@ const createLot = asyncHandler(async (req, res) => {
     location: req.body.location?.city || req.body.city,
   });
 
-  const photos = await persistUploadedFiles(req.files || []);
+  // Handle photos from either multipart upload OR pre-uploaded URLs in request body
+  let photos = [];
+  
+  if (req.files && req.files.length > 0) {
+    // Process multipart file uploads
+    photos = await persistUploadedFiles(req.files);
+  } else if (req.body.photos && Array.isArray(req.body.photos)) {
+    // Use pre-uploaded URLs from request body
+    // This allows clients (like Android) to upload to Cloudinary first, then pass URLs
+    photos = req.body.photos.filter(url => typeof url === 'string' && url.trim().length > 0);
+  }
+  
   const location = req.body.location
     ? (typeof req.body.location === 'string' ? JSON.parse(req.body.location) : req.body.location)
     : {
@@ -151,6 +196,11 @@ const listLots = asyncHandler(async (req, res) => {
     lots = await Lot.find(filter).populate('collector', 'name phone generalLocation').sort({ createdAt: -1 });
   }
 
+  // Apply privacy rules for recyclers: sanitize location data before offer acceptance
+  if (req.user.role === 'recycler') {
+    lots = await Promise.all(lots.map(lot => sanitizeForRecycler(lot, req.user._id)));
+  }
+
   return success(res, { message: 'Lots', data: lots.map(formatLot) });
 });
 
@@ -165,7 +215,14 @@ const getLot = asyncHandler(async (req, res) => {
   if (req.user.role === 'collector' && lot.collector._id.toString() !== req.user._id.toString()) {
     throw new ApiError(403, 'Not your lot');
   }
-  return success(res, { message: 'Lot', data: formatLot(lot) });
+  
+  // Apply privacy rules for recyclers: sanitize location data before offer acceptance
+  let sanitized = lot;
+  if (req.user.role === 'recycler') {
+    sanitized = await sanitizeForRecycler(lot, req.user._id);
+  }
+  
+  return success(res, { message: 'Lot', data: formatLot(sanitized) });
 });
 
 const updateLot = asyncHandler(async (req, res) => {

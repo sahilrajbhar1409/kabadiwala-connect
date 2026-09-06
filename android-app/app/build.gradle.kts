@@ -1,4 +1,7 @@
-﻿plugins {
+﻿import java.util.Properties
+import java.io.FileInputStream
+
+plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
@@ -21,11 +24,24 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        // Load Cloudinary credentials from local.properties
+        val localProperties = Properties()
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            FileInputStream(localPropertiesFile).use { localProperties.load(it) }
+        }
+        
         buildConfigField(
             "String",
             "API_BASE_URL",
             "\"${project.findProperty("api.base.url") ?: "http://127.0.0.1:5000/api/"}\""
         )
+        buildConfigField("String", "CLOUDINARY_CLOUD_NAME", "\"${localProperties.getProperty("cloudinary.cloud.name", "")}\"")
+        buildConfigField("String", "CLOUDINARY_API_KEY", "\"${localProperties.getProperty("cloudinary.api.key", "")}\"")
+        buildConfigField("String", "CLOUDINARY_API_SECRET", "\"${localProperties.getProperty("cloudinary.api.secret", "")}\"")
+        buildConfigField("String", "CLOUDINARY_UPLOAD_FOLDER", "\"${localProperties.getProperty("cloudinary.upload.folder", "kabadiwala-connect")}\"")
+
     }
 
     buildTypes {
@@ -59,7 +75,13 @@ dependencies {
     // OpenStreetMap
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 
-    implementation("androidx.navigation:navigation-compose:2.9.3")
+    // Image loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    
+    // Cloudinary for Image Upload
+    implementation("com.cloudinary:cloudinary-android:2.5.0")
+
+    implementation("androidx.navigation:androidx.navigation:navigation-compose:2.9.3")
 
     implementation("androidx.compose.material:material-icons-extended")
     implementation(platform(libs.androidx.compose.bom))
