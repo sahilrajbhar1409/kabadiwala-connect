@@ -45,9 +45,7 @@ object CloudinaryUploadService {
             }
 
             val config = mapOf(
-                "cloud_name" to BuildConfig.CLOUDINARY_CLOUD_NAME,
-                "api_key" to BuildConfig.CLOUDINARY_API_KEY,
-                "api_secret" to BuildConfig.CLOUDINARY_API_SECRET
+                "cloud_name" to BuildConfig.CLOUDINARY_CLOUD_NAME
             )
 
             MediaManager.init(context, config)
@@ -83,6 +81,7 @@ object CloudinaryUploadService {
 
             val uploadOptions = mapOf(
                 "folder" to folder,
+                "upload_preset" to BuildConfig.CLOUDINARY_UPLOAD_PRESET,
                 "resource_type" to "image",
                 "quality" to "auto:good",
                 "fetch_format" to "auto"

@@ -7,6 +7,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
 const { notify } = require('../utils/notify');
+const { sanitizeForRecycler } = require('../utils/locationPrivacy');
 
 const createOffer = asyncHandler(async (req, res) => {
   const lot = await Lot.findById(req.body.lotId || req.body.lot);
@@ -60,12 +61,25 @@ const listOffers = asyncHandler(async (req, res) => {
     .populate('lot')
     .populate('recycler', 'name phone')
     .sort({ createdAt: -1 });
+  if (req.user.role === 'recycler') {
+    await Promise.all(offers.map(async (offer) => {
+      offer.lot = await sanitizeForRecycler(offer.lot, req.user._id);
+    }));
+  }
   return success(res, { message: 'Offers', data: offers });
 });
 
 const getOffer = asyncHandler(async (req, res) => {
   const offer = await Offer.findById(req.params.id).populate('lot').populate('recycler', 'name phone');
   if (!offer) throw new ApiError(404, 'Offer not found');
+  const isOwner = offer.lot.collector.toString() === req.user._id.toString();
+  const isRecycler = offer.recycler._id.toString() === req.user._id.toString();
+  if (!isOwner && !isRecycler && req.user.role !== 'admin') {
+    throw new ApiError(403, 'Not allowed');
+  }
+  if (req.user.role === 'recycler') {
+    offer.lot = await sanitizeForRecycler(offer.lot, req.user._id);
+  }
   return success(res, { message: 'Offer', data: offer });
 });
 
@@ -151,8 +165,9 @@ const rejectOffer = asyncHandler(async (req, res) => {
   if (offer.status !== 'PENDING') throw new ApiError(400, 'Offer is not pending');
   offer.status = 'REJECTED';
   await offer.save();
+  const recipient = isOwner ? offer.recycler : lot.collector;
   await notify({
-    user: offer.recycler,
+    user: recipient,
     title: 'Offer closed',
     message: `Offer on ${lot.lotNumber} was rejected.`,
     type: 'OFFER_REJECTED',

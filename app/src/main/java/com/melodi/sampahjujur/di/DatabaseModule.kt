@@ -7,6 +7,7 @@ import com.melodi.sampahjujur.data.local.dao.PickupRequestDao
 import com.melodi.sampahjujur.data.local.dao.TransactionDao
 import com.melodi.sampahjujur.data.local.dao.UserDao
 import com.melodi.sampahjujur.data.local.dao.WasteItemDao
+import com.melodi.sampahjujur.data.local.dao.PriceDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -99,6 +100,10 @@ object DatabaseModule {
     fun provideCollectionRequestDao(database: SampahJujurDatabase): com.melodi.sampahjujur.data.local.dao.CollectionRequestDao {
         return database.collectionRequestDao()
     }
+
+    @Provides
+    @Singleton
+    fun providePriceDao(database: SampahJujurDatabase): PriceDao = database.priceDao()
 
     /**
      * Person 4: Provides HandoverRecordDao for handover record operations

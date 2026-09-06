@@ -185,6 +185,16 @@ fun CollectorDashboardScreen(
                             Spacer(modifier = Modifier.width(3.dp))
                             Text("Recycler", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
+                        OutlinedButton(
+                            onClick = { onNavigate("price_board") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.ShowChart, contentDescription = null, tint = PrimaryGreen, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Prices", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

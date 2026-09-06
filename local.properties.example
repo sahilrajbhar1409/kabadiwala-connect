@@ -9,6 +9,7 @@
 cloudinary.cloud.name=your_cloud_name_here
 cloudinary.api.key=your_api_key_here
 cloudinary.api.secret=your_api_secret_here
+cloudinary.upload.preset=your_unsigned_upload_preset
 cloudinary.upload.folder=sampah-jujur
 
 # Notification Server Configuration

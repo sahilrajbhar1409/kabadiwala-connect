@@ -1,5 +1,7 @@
 package com.melodi.sampahjujur.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.melodi.sampahjujur.model.*
@@ -35,7 +37,8 @@ data class CollectionUiState(
     val currentLotIdPreview: String = "",
     val selectedCategory: String = ScrapMaterial.STANDARD_CATEGORIES.first(),
     val inputWeight: String = "",
-    val inputNotes: String = ""
+    val inputNotes: String = "",
+    val selectedPhotoUris: List<Uri> = emptyList()
 )
 
 @HiltViewModel
@@ -157,6 +160,17 @@ class CollectionViewModel @Inject constructor(
         _uiState.update { it.copy(inputNotes = notes) }
     }
 
+    fun addPhoto(uri: Uri) {
+        _uiState.update { state ->
+            if (state.selectedPhotoUris.size >= 6) state
+            else state.copy(selectedPhotoUris = state.selectedPhotoUris + uri)
+        }
+    }
+
+    fun removeLastPhoto() {
+        _uiState.update { state -> state.copy(selectedPhotoUris = state.selectedPhotoUris.dropLast(1)) }
+    }
+
     fun captureCurrentLocation() {
         viewModelScope.launch {
             _uiState.update { it.copy(isCapturingLocation = true) }
@@ -200,7 +214,7 @@ class CollectionViewModel @Inject constructor(
         }
     }
 
-    fun createCollectionRequest(onSuccess: (String) -> Unit) {
+    fun createCollectionRequest(context: Context, onSuccess: (String) -> Unit) {
         viewModelScope.launch {
             val currentState = _uiState.value
             val weight = currentState.inputWeight.toDoubleOrNull() ?: 0.0
@@ -213,9 +227,20 @@ class CollectionViewModel @Inject constructor(
 
             val user = authRepository.getCurrentUser()
             val collectorId = user?.id ?: "local_collector"
+            val photoUrls = if (currentState.selectedPhotoUris.isNotEmpty() && backendApiRepository.isAuthenticated()) {
+                backendApiRepository.uploadImages(context, currentState.selectedPhotoUris).getOrElse {
+                    _uiState.update { it.copy(isLoading = false, errorMessage = "Photo upload failed: ${it.message}") }
+                    return@launch
+                }
+            } else emptyList()
 
-            val rate = ScrapMaterial.DEFAULT_CATEGORY_RATES[currentState.selectedCategory] ?: 30.0
-            val estimatedVal = weight * rate
+            val fallbackRate = ScrapMaterial.DEFAULT_CATEGORY_RATES[currentState.selectedCategory] ?: 30.0
+            val fallbackValue = weight * fallbackRate
+            val estimatedVal = backendApiRepository.estimatePrice(
+                currentState.selectedCategory.toBackendCategory(),
+                currentState.capturedLocationText,
+                weight
+            ).getOrDefault(fallbackValue)
 
             val material = ScrapMaterial(
                 materialId = "MAT-${System.currentTimeMillis()}",
@@ -232,7 +257,8 @@ class CollectionViewModel @Inject constructor(
                 materials = listOf(material),
                 approximateWeight = weight,
                 quotedPrice = estimatedVal,
-                notes = currentState.inputNotes
+                notes = currentState.inputNotes,
+                photos = photoUrls
             )
 
             if (result.isSuccess) {
@@ -242,6 +268,7 @@ class CollectionViewModel @Inject constructor(
                         isLoading = false,
                         inputWeight = "",
                         inputNotes = "",
+                        selectedPhotoUris = emptyList(),
                         currentLotIdPreview = LotIdGenerator.generateLotId(),
                         successMessage = "Lot ${created.lotId} created successfully!"
                     )
@@ -574,4 +601,16 @@ class CollectionViewModel @Inject constructor(
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
     }
+}
+
+private fun String.toBackendCategory(): String = when (trim().uppercase()) {
+    "CRT" -> "CRT"
+    "LCD" -> "LCD_PANEL"
+    "PCB" -> "PCB"
+    "CABLES", "CABLE" -> "CABLE"
+    "BATTERIES", "BATTERY" -> "BATTERY"
+    "MOTORS", "MOTOR" -> "MOTOR"
+    "MAGNETS", "MAGNET_ASSEMBLY" -> "MAGNET_ASSEMBLY"
+    "MIXED PLASTICS", "MIXED_PLASTICS", "MIXED_PLASTIC" -> "MIXED_PLASTIC"
+    else -> "OTHER"
 }

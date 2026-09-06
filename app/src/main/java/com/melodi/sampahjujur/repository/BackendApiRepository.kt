@@ -11,6 +11,12 @@ import com.melodi.sampahjujur.api.BackendPaymentRequest
 import com.melodi.sampahjujur.api.BackendEnvelope
 import javax.inject.Inject
 import javax.inject.Singleton
+import android.content.Context
+import android.net.Uri
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
 
 @Singleton
 class BackendApiRepository @Inject constructor(
@@ -37,11 +43,31 @@ class BackendApiRepository @Inject constructor(
     suspend fun recyclers(): Result<List<Map<String, Any?>>> = execute { api.recyclers() }
     suspend fun createLot(request: BackendCreateLotRequest): Result<Map<String, Any?>> =
         execute { api.createLot(request) }
+    suspend fun uploadImages(context: Context, uris: List<Uri>): Result<List<String>> {
+        val parts = uris.take(6).mapIndexedNotNull { index, uri ->
+            val file = File.createTempFile("lot-$index-", ".jpg", context.cacheDir)
+            context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use(input::copyTo) }
+                ?: return@mapIndexedNotNull null
+            MultipartBody.Part.createFormData("photos", file.name, file.asRequestBody("image/*".toMediaType()))
+        }
+        return execute { api.uploadImages(parts) }.map { it["urls"] as? List<String> ?: emptyList() }
+    }
+    suspend fun estimatePrice(category: String, location: String, weight: Double): Result<Double> =
+        execute { api.prices(category, location, weight) }.map { payload ->
+            (payload as? Map<*, *>)?.get("estimatedValue")?.toString()?.toDoubleOrNull()
+                ?: throw IllegalStateException("Backend price response missing estimatedValue")
+        }
+    suspend fun prices(category: String? = null): Result<Any> = execute { api.prices(category = category) }
+    suspend fun priceTrends(category: String, limit: Int = 12): Result<Any> =
+        execute { api.priceTrends(category, limit) }
     suspend fun lots(): Result<List<Map<String, Any?>>> = execute { api.lots() }
     suspend fun myLots(): Result<List<Map<String, Any?>>> = execute { api.myLots() }
     suspend fun createOffer(request: BackendCreateOfferRequest): Result<Map<String, Any?>> =
         execute { api.createOffer(request) }
     suspend fun offers(): Result<List<Map<String, Any?>>> = execute { api.offers() }
+    suspend fun notifications(): Result<List<Map<String, Any?>>> = execute { api.notifications() }
+    suspend fun markNotificationRead(id: String): Result<Map<String, Any?>> =
+        execute { api.markNotificationRead(id) }
     suspend fun transactions(): Result<List<Map<String, Any?>>> = execute { api.transactions() }
     suspend fun createHandover(request: BackendHandoverRequest): Result<Map<String, Any?>> =
         execute { api.createHandover(request) }

@@ -11,12 +11,14 @@ import com.melodi.sampahjujur.data.local.dao.PickupRequestDao
 import com.melodi.sampahjujur.data.local.dao.TransactionDao
 import com.melodi.sampahjujur.data.local.dao.UserDao
 import com.melodi.sampahjujur.data.local.dao.WasteItemDao
+import com.melodi.sampahjujur.data.local.dao.PriceDao
 import com.melodi.sampahjujur.data.local.entity.CollectionRequestEntity
 import com.melodi.sampahjujur.data.local.entity.HandoverRecordEntity
 import com.melodi.sampahjujur.data.local.entity.PickupRequestEntity
 import com.melodi.sampahjujur.data.local.entity.TransactionEntity
 import com.melodi.sampahjujur.data.local.entity.UserEntity
 import com.melodi.sampahjujur.data.local.entity.WasteItemEntity
+import com.melodi.sampahjujur.data.local.entity.PriceEntity
 
 /**
  * Room Database for Sampah Jujur application.
@@ -27,7 +29,7 @@ import com.melodi.sampahjujur.data.local.entity.WasteItemEntity
  * - Pickup requests (offline submission)
  * - Person 4: Collection requests & digital handover records
  *
- * Database version: 3
+ * Database version: 4
  */
 @Database(
     entities = [
@@ -37,8 +39,9 @@ import com.melodi.sampahjujur.data.local.entity.WasteItemEntity
         PickupRequestEntity::class,
         CollectionRequestEntity::class,
         HandoverRecordEntity::class
+        ,PriceEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(TransactionConverters::class, CollectionConverters::class)
@@ -73,6 +76,8 @@ abstract class SampahJujurDatabase : RoomDatabase() {
      * Person 4: Provides access to HandoverRecord operations
      */
     abstract fun handoverRecordDao(): HandoverRecordDao
+
+    abstract fun priceDao(): PriceDao
 
     companion object {
         /**

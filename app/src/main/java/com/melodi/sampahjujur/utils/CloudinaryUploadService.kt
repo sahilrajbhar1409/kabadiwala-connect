@@ -15,7 +15,6 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -40,8 +39,7 @@ object CloudinaryUploadService {
         try {
             val config = mapOf(
                 "cloud_name" to BuildConfig.CLOUDINARY_CLOUD_NAME,
-                "api_key" to BuildConfig.CLOUDINARY_API_KEY,
-                "api_secret" to BuildConfig.CLOUDINARY_API_SECRET
+                "api_key" to BuildConfig.CLOUDINARY_API_KEY
             )
 
             MediaManager.init(context, config)
@@ -76,6 +74,7 @@ object CloudinaryUploadService {
 
             val uploadOptions = mapOf(
                 "folder" to folder,
+                "upload_preset" to BuildConfig.CLOUDINARY_UPLOAD_PRESET,
                 "resource_type" to "image",
                 "quality" to "auto:good",
                 "fetch_format" to "auto"
@@ -163,44 +162,8 @@ object CloudinaryUploadService {
 
             Log.d(TAG, "Attempting to delete image with public_id: $publicId")
 
-            // Generate timestamp for signature
-            val timestamp = (System.currentTimeMillis() / 1000).toString()
-
-            // Create signature: SHA1(public_id=xxx&timestamp=xxx + api_secret)
-            val stringToSign = "public_id=$publicId&timestamp=$timestamp${BuildConfig.CLOUDINARY_API_SECRET}"
-            val signature = sha1(stringToSign)
-
-            // Make DELETE request to Cloudinary
-            val cloudName = BuildConfig.CLOUDINARY_CLOUD_NAME
-            val apiKey = BuildConfig.CLOUDINARY_API_KEY
-            val url = URL("https://api.cloudinary.com/v1_1/$cloudName/image/destroy")
-
-            val connection = url.openConnection() as HttpURLConnection
-            connection.requestMethod = "POST"
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-
-            // Build request body
-            val postData = "public_id=$publicId&timestamp=$timestamp&api_key=$apiKey&signature=$signature"
-            connection.outputStream.use { os ->
-                os.write(postData.toByteArray())
-            }
-
-            val responseCode = connection.responseCode
-            val responseMessage = connection.inputStream.bufferedReader().use { it.readText() }
-
-            Log.d(TAG, "Delete response code: $responseCode")
-            Log.d(TAG, "Delete response: $responseMessage")
-
-            connection.disconnect()
-
-            if (responseCode == 200) {
-                Log.d(TAG, "Successfully deleted image: $publicId")
-                true
-            } else {
-                Log.e(TAG, "Failed to delete image: $responseCode - $responseMessage")
-                false
-            }
+            Log.w(TAG, "Client-side Cloudinary deletion is disabled; use the backend lifecycle")
+            false
         } catch (e: Exception) {
             Log.e(TAG, "Error deleting image from Cloudinary", e)
             false
@@ -242,10 +205,6 @@ object CloudinaryUploadService {
     /**
      * Generate SHA-1 hash for Cloudinary signature
      */
-    private fun sha1(input: String): String {
-        val bytes = MessageDigest.getInstance("SHA-1").digest(input.toByteArray())
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
 
     /**
      * Convert URI to File

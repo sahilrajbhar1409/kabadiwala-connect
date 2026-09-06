@@ -100,6 +100,7 @@ sealed class Screen(val route: String) {
     object LotTraceability : Screen("lot_traceability/{lotId}") {
         fun createRoute(lotId: String) = "lot_traceability/$lotId"
     }
+    object PriceBoard : Screen("price_board")
 
     // Person 4: Recycler Side Flow (SIH 26229: Kabadiwala Connect)
     object RecyclerDashboard : Screen("recycler_dashboard")
@@ -802,6 +803,10 @@ fun SampahJujurNavGraph(
                     navController.navigate(Screen.RecyclerSelection.createRoute(lotId))
                 }
             )
+        }
+
+        composable(Screen.PriceBoard.route) {
+            PriceBoardScreen(onBackClick = { navController.popBackStack() })
         }
 
         // 2. Select Authorized Recycler Screen

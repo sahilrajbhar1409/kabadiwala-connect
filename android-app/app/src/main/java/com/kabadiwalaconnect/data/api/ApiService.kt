@@ -9,6 +9,9 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import okhttp3.MultipartBody
+import retrofit2.http.Multipart
+import retrofit2.http.Part
 
 data class ApiEnvelope<T>(
     val success: Boolean = false,
@@ -75,6 +78,10 @@ data class PaymentRequest(
 )
 
 interface ApiService {
+    @Multipart
+    @POST("uploads")
+    suspend fun uploadImages(@Part photos: List<MultipartBody.Part>): Response<ApiEnvelope<Map<String, Any?>>>
+
     @GET("health")
     suspend fun health(): Response<ApiEnvelope<Map<String, Any?>>>
 

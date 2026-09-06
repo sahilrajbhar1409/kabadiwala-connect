@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,7 +35,17 @@ data class CollectionEarningsSummary(
 )
 
 private fun currentBackendCategory(category: String?): String =
-    category?.trim()?.takeIf { it.isNotEmpty() }?.uppercase()?.replace(' ', '_') ?: "MIXED_PLASTICS"
+    when (category?.trim()?.uppercase()) {
+        "CRT" -> "CRT"
+        "LCD" -> "LCD_PANEL"
+        "PCB" -> "PCB"
+        "CABLES", "CABLE" -> "CABLE"
+        "BATTERIES", "BATTERY" -> "BATTERY"
+        "MOTORS", "MOTOR" -> "MOTOR"
+        "MAGNETS", "MAGNET_ASSEMBLY" -> "MAGNET_ASSEMBLY"
+        "MIXED PLASTICS", "MIXED_PLASTICS", "MIXED_PLASTIC" -> "MIXED_PLASTIC"
+        else -> "OTHER"
+    }
 
 private fun Map<String, Any?>.backendLotNumber(): String? {
     val lot = this["lot"] as? Map<*, *> ?: this
@@ -76,6 +88,25 @@ private fun Map<String, Any?>.referencesLot(lotId: String): Boolean {
     ).any { it?.toString() == lotId }
 }
 
+private fun Map<*, *>.traceTimestamp(): Long = when (val raw = this["at"]) {
+    is Number -> raw.toLong()
+    is String -> listOf("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ssX")
+        .asSequence()
+        .mapNotNull { pattern -> runCatching { SimpleDateFormat(pattern, Locale.US).parse(raw)?.time }.getOrNull() }
+        .firstOrNull() ?: 0L
+    else -> 0L
+}
+
+private fun Map<*, *>.traceStage(): CollectionStatus = when (this["step"]?.toString()) {
+    "MATCHED", "OFFER" -> CollectionStatus.RECYCLER_ASSIGNED
+    "OFFER_ACCEPTED" -> CollectionStatus.ACCEPTED
+    "OFFER_REJECTED" -> CollectionStatus.REJECTED
+    "TRANSACTION" -> CollectionStatus.ACCEPTED
+    "HANDOVER", "COLLECTOR_CONFIRMATION", "RECYCLER_CONFIRMATION", "VERIFIED" -> CollectionStatus.HANDED_OVER
+    "PAYMENT" -> if (this["status"]?.toString() == "PAID") CollectionStatus.COMPLETED else CollectionStatus.PAYMENT_PENDING
+    else -> CollectionStatus.CREATED
+}
+
 /**
  * Primary repository for Person 4 (SIH 26229: Kabadiwala Connect).
  * Implements offline-first collection request creation, Lot ID generation,
@@ -112,7 +143,8 @@ class CollectionRepository @Inject constructor(
         materials: List<ScrapMaterial>,
         approximateWeight: Double,
         quotedPrice: Double,
-        notes: String = ""
+        notes: String = "",
+        photos: List<String> = emptyList()
     ): Result<CollectionRequest> {
         return try {
             val localLotId = LotIdGenerator.generateLotId()
@@ -167,7 +199,8 @@ class CollectionRepository @Inject constructor(
                         address = address,
                         latitude = lat,
                         longitude = lng,
-                        notes = notes
+                        notes = notes,
+                        photos = photos
                     )
                 )
                 backendResult.exceptionOrNull()?.let {
@@ -886,7 +919,22 @@ class CollectionRepository @Inject constructor(
                 timeline = timeline
             )
 
-            Result.success(chain)
+            // Prefer the authenticated backend audit timeline when online; retain the local chain offline.
+            val backendTimeline = backendApiRepository.trace(lotId).getOrNull()
+                ?.get("timeline") as? List<*>
+            val onlineTimeline = backendTimeline.orEmpty().mapNotNull { item ->
+                val event = item as? Map<*, *> ?: return@mapNotNull null
+                TraceabilityEvent(
+                    stage = event.traceStage(),
+                    title = event["step"]?.toString() ?: "Traceability event",
+                    description = event["detail"]?.toString().orEmpty(),
+                    timestamp = event.traceTimestamp(),
+                    location = "",
+                    isCompleted = true
+                )
+            }.sortedBy { it.timestamp }
+
+            Result.success(if (onlineTimeline.isEmpty()) chain else chain.copy(timeline = onlineTimeline))
         } catch (e: Exception) {
             Log.e(TAG, "Failed to trace Lot: $lotId", e)
             Result.failure(e)

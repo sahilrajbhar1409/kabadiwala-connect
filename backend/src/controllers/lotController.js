@@ -10,6 +10,8 @@ const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
 const { notify } = require('../utils/notify');
 const RecyclerProfile = require('../models/RecyclerProfile');
+const { sanitizeForRecycler } = require('../utils/locationPrivacy');
+const { analyzeLot } = require('../services/aiService');
 
 const formatLot = (lot) => {
   const obj = lot.toObject ? lot.toObject() : lot;
@@ -20,39 +22,6 @@ const formatLot = (lot) => {
   };
 };
 
-/**
- * Sanitize lot data for recyclers based on privacy rules:
- * - Before offer acceptance: hide precise coordinates (latitude/longitude)
- * - Show only general location (address/city)
- * - After acceptance: allow access to full location details
- */
-const sanitizeForRecycler = async (lot, recycler) => {
-  if (!recycler) return lot;
-  
-  // Check if recycler has accepted an offer on this lot
-  const Offer = require('../models/Offer');
-  const acceptedOffer = await Offer.findOne({
-    lot: lot._id,
-    recycler: recycler,
-    status: 'ACCEPTED'
-  });
-  
-  // If recycler has accepted, show full location
-  if (acceptedOffer) {
-    return lot;
-  }
-  
-  // Before acceptance, remove precise coordinates for privacy
-  const sanitized = lot.toObject ? lot.toObject() : lot;
-  if (sanitized.location) {
-    sanitized.location = {
-      address: sanitized.location.address || '',
-      city: sanitized.location.city || ''
-      // latitude and longitude intentionally omitted
-    };
-  }
-  return sanitized;
-};
 
 const createLot = asyncHandler(async (req, res) => {
   const weight = Number(req.body.approximateWeight);
@@ -116,6 +85,20 @@ const createLot = asyncHandler(async (req, res) => {
     status: req.body.status === 'DRAFT' ? 'DRAFT' : 'OPEN',
     clientGeneratedId: req.body.clientGeneratedId || null,
   });
+
+  if (photos.length) {
+    try {
+      lot.aiAnalysis = await analyzeLot({
+        photoUrl: photos[0],
+        weight,
+        actualPrice: quote.estimatedValue,
+      });
+      if (lot.aiAnalysis) await lot.save();
+    } catch (error) {
+      lot.aiAnalysis = { status: 'UNAVAILABLE', message: error.message };
+      await lot.save();
+    }
+  }
 
   const matches = await matchRecyclersForLot(lot);
   if (matches.length) {

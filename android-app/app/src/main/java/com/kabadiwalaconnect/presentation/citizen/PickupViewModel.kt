@@ -17,8 +17,6 @@ import com.kabadiwalaconnect.data.repository.AiDemoService
 import com.kabadiwalaconnect.data.repository.AiDemoServiceProvider
 import com.kabadiwalaconnect.data.repository.CollectionRepository
 import com.kabadiwalaconnect.data.repository.CollectionRepositoryProvider
-import com.kabadiwalaconnect.utils.CloudinaryException
-import com.kabadiwalaconnect.utils.CloudinaryUploadService
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -114,36 +112,25 @@ class PickupViewModel(
         val uploadedUrls = mutableListOf<String>()
 
         try {
-            CloudinaryUploadService.initialize(context)
+            photoUris.forEach { photo ->
+                if (photo.uploadedUrl != null) uploadedUrls.add(photo.uploadedUrl)
+            }
 
-            for (i in photoUris.indices) {
-                val photoState = photoUris[i]
-                if (photoState.uploadedUrl != null) {
-                    uploadedUrls.add(photoState.uploadedUrl)
-                    continue
-                }
-
-                try {
-                    // Update state to show uploading
-                    photoUris = photoUris.toMutableList().apply {
-                        set(i, get(i).copy(isUploading = true, error = null))
+            val pending = photoUris.filter { it.uploadedUrl == null }.map { it.uri }
+            if (pending.isNotEmpty()) {
+                photoUris = photoUris.map { it.copy(isUploading = it.uploadedUrl == null, error = null) }
+                val result = backendRepository?.uploadImages(context, pending)
+                if (result?.isSuccess == true) {
+                    val urls = result.getOrNull().orEmpty()
+                    uploadedUrls.addAll(urls)
+                    photoUris = photoUris.mapIndexed { index, state ->
+                        if (state.uploadedUrl != null) state
+                        else urls.getOrNull(index)?.let { state.copy(isUploading = false, uploadedUrl = it) }
+                            ?: state.copy(isUploading = false, error = "Upload failed")
                     }
-
-                    // Upload to Cloudinary
-                    val url = CloudinaryUploadService.uploadImage(context, photoState.uri)
-
-                    // Update state with successful upload
-                    photoUris = photoUris.toMutableList().apply {
-                        set(i, get(i).copy(isUploading = false, uploadedUrl = url))
-                    }
-                    uploadedUrls.add(url)
-                } catch (e: CloudinaryException) {
-                    val errorMsg = e.message ?: "Upload failed"
-                    photoUris = photoUris.toMutableList().apply {
-                        set(i, get(i).copy(isUploading = false, error = errorMsg))
-                    }
-                    errorMessage = "Failed to upload photo ${i + 1}: $errorMsg"
-                    // Continue with other photos instead of failing completely
+                } else {
+                    errorMessage = result?.exceptionOrNull()?.message ?: "Photo upload failed"
+                    photoUris = photoUris.map { it.copy(isUploading = false, error = errorMessage) }
                 }
             }
 
@@ -229,10 +216,12 @@ class PickupViewModel(
         latitude: Double,
         longitude: Double
     ): PickupResult? {
+        val authoritativeValue = backendRepository?.estimatePrice(materialId.toBackendCategory(), pickupAddress, estimatedWeight)
+            ?.getOrNull() ?: estimatedValue
         val result = submit(
             materialId,
             estimatedWeight,
-            estimatedValue,
+            authoritativeValue,
             pickupAddress,
             latitude,
             longitude
@@ -245,7 +234,7 @@ class PickupViewModel(
 
             val response = backend.createLot(
                 CreateLotRequest(
-                    materialCategory = materialId.uppercase().replace(' ', '_'),
+                    materialCategory = materialId.toBackendCategory(),
                     materialDescription = "Pickup request from Kabadiwala Connect",
                     approximateWeight = estimatedWeight,
                     address = pickupAddress,
@@ -256,12 +245,45 @@ class PickupViewModel(
                     photos = photoUrls
                 )
             )
+            response.getOrNull()?.let { payload ->
+                val lotPayload = payload["lot"] as? Map<*, *> ?: payload
+                val analysis = lotPayload["aiAnalysis"] as? Map<*, *>
+                val classification = analysis?.get("classification") as? Map<*, *>
+                val valuation = analysis?.get("valuation") as? Map<*, *>
+                if (classification != null && valuation != null) {
+                    val confidence = classification["confidence_score"]?.toString()
+                        ?.removeSuffix("%")?.toDoubleOrNull()?.div(100.0) ?: 0.0
+                    prediction = AiPrediction(
+                        id = "AI-${result.lot.lotId}",
+                        materialId = classification["detected_material"]?.toString().orEmpty(),
+                        predictedWeight = (valuation["weight_kg"] as? Number)?.toDouble() ?: estimatedWeight,
+                        predictedValue = (valuation["expected_fair_price"] as? Number)?.toDouble() ?: estimatedValue,
+                        confidence = confidence,
+                        createdAt = now(),
+                        updatedAt = now(),
+                        imageReference = photoUrls.firstOrNull() ?: "backend-analysis",
+                        modelVersion = "fastapi"
+                    )
+                }
+            }
             response.exceptionOrNull()?.let {
                 backend.logFailure("lot creation", it)
             }
         }
         return result
     }
+}
+
+private fun String.toBackendCategory(): String = when (trim().uppercase()) {
+    "CRT" -> "CRT"
+    "LCD" -> "LCD_PANEL"
+    "PCB" -> "PCB"
+    "CABLES", "CABLE" -> "CABLE"
+    "BATTERIES", "BATTERY" -> "BATTERY"
+    "MOTORS", "MOTOR" -> "MOTOR"
+    "MAGNETS", "MAGNET_ASSEMBLY" -> "MAGNET_ASSEMBLY"
+    "MIXED PLASTICS", "MIXED_PLASTICS", "MIXED_PLASTIC" -> "MIXED_PLASTIC"
+    else -> "OTHER"
 }
 
 
