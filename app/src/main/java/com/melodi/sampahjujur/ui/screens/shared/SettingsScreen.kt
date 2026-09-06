@@ -31,6 +31,7 @@ fun SettingsScreen(
     onLanguageClick: () -> Unit = {},
     onPrivacyPolicyClick: () -> Unit = {},
     onTermsClick: () -> Unit = {},
+    onSafetyClick: () -> Unit = {},
     onDeleteAccountClick: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -233,6 +234,13 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
+                        SettingsNavigationItem(
+                            icon = Icons.Default.HealthAndSafety,
+                            title = "Safety guidance",
+                            subtitle = "Read safe handling guidance aloud",
+                            onClick = onSafetyClick
+                        )
+                        Divider(color = Color.LightGray.copy(alpha = 0.2f))
                         SettingsNavigationItem(
                             icon = Icons.Default.Description,
                             title = "Terms & Conditions",

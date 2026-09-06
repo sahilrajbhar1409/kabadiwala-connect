@@ -36,6 +36,7 @@ android {
         buildConfigField("String", "CLOUDINARY_API_SECRET", "\"${localProperties.getProperty("cloudinary.api.secret", "")}\"")
         buildConfigField("String", "CLOUDINARY_UPLOAD_FOLDER", "\"${localProperties.getProperty("cloudinary.upload.folder", "sampah-jujur")}\"")
         buildConfigField("String", "NOTIFICATION_SERVER_URL", "\"${localProperties.getProperty("notification.server.url", "http://10.0.2.2:3000")}\"")
+        buildConfigField("String", "API_BASE_URL", "\"${localProperties.getProperty("api.base.url", "http://10.0.2.2:5000/api/")}\"")
     }
 
     buildTypes {
