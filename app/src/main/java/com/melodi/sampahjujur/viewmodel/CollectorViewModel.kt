@@ -13,6 +13,7 @@ import com.melodi.sampahjujur.model.Transaction
 import com.melodi.sampahjujur.model.TransactionItem
 import com.melodi.sampahjujur.model.User
 import com.melodi.sampahjujur.repository.AuthRepository
+import com.melodi.sampahjujur.repository.BackendApiRepository
 import com.melodi.sampahjujur.repository.LocationRepository
 import com.melodi.sampahjujur.repository.LocationTrackingRepository
 import com.melodi.sampahjujur.repository.TransactionCacheRepository
@@ -65,6 +66,7 @@ class CollectorViewModel @Inject constructor(
     private val locationRepository: LocationRepository,
     private val transactionCacheRepository: TransactionCacheRepository,
     private val locationTrackingRepository: LocationTrackingRepository,
+    private val backendApiRepository: BackendApiRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -97,6 +99,22 @@ class CollectorViewModel @Inject constructor(
         loadMyRequests()
         loadCollectorEarnings()
         refreshCollectorLocation()
+        refreshBackendCollectorData()
+    }
+
+    private fun refreshBackendCollectorData() {
+        if (!backendApiRepository.isAuthenticated()) return
+        viewModelScope.launch {
+            val dashboard = backendApiRepository.dashboard("collector")
+            val lots = backendApiRepository.myLots()
+            if (dashboard.isFailure || lots.isFailure) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = dashboard.exceptionOrNull()?.message
+                        ?: lots.exceptionOrNull()?.message
+                        ?: "Unable to load collector backend data"
+                )
+            }
+        }
     }
 
     /**

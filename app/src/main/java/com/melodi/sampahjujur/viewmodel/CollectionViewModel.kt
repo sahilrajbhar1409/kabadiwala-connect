@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.melodi.sampahjujur.model.*
 import com.melodi.sampahjujur.repository.AuthRepository
+import com.melodi.sampahjujur.repository.BackendApiRepository
 import com.melodi.sampahjujur.repository.CollectionEarningsSummary
 import com.melodi.sampahjujur.repository.CollectionRepository
 import com.melodi.sampahjujur.repository.LocationRepository
@@ -41,7 +42,8 @@ data class CollectionUiState(
 class CollectionViewModel @Inject constructor(
     private val collectionRepository: CollectionRepository,
     private val authRepository: AuthRepository,
-    private val locationRepository: LocationRepository
+    private val locationRepository: LocationRepository,
+    private val backendApiRepository: BackendApiRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
@@ -56,6 +58,19 @@ class CollectionViewModel @Inject constructor(
         loadRecyclers()
         observeCollectorData()
         captureCurrentLocation()
+        refreshBackendData()
+    }
+
+    private fun refreshBackendData() {
+        if (!backendApiRepository.isAuthenticated()) return
+        viewModelScope.launch {
+            val result = backendApiRepository.offers()
+            if (result.isFailure) {
+                _uiState.update {
+                    it.copy(errorMessage = result.exceptionOrNull()?.message ?: "Unable to load backend offers")
+                }
+            }
+        }
     }
 
     private fun observeCollectorData() {

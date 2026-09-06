@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.melodi.sampahjujur.model.User
 import com.melodi.sampahjujur.repository.AuthRepository
+import com.melodi.sampahjujur.repository.BackendApiRepository
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.PhoneAuthCredential
 import com.google.firebase.auth.PhoneAuthProvider
@@ -22,7 +23,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val backendApiRepository: BackendApiRepository
 ) : ViewModel() {
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
@@ -77,6 +79,9 @@ class AuthViewModel @Inject constructor(
 
             if (result.isSuccess) {
                 val user = result.getOrNull()!!
+                backendApiRepository.login(email, password).onFailure {
+                    android.util.Log.i("AuthViewModel", "Backend session not established for Firebase user: ${it.message}")
+                }
                 android.util.Log.d("AuthViewModel", "signInHousehold: Success - User: ${user.fullName}, Email: ${user.email}, UserType: ${user.userType}")
                 _authState.value = AuthState.Authenticated(user)
                 _uiState.value = _uiState.value.copy(isLoading = false)
@@ -353,6 +358,11 @@ class AuthViewModel @Inject constructor(
      */
     fun signOut() {
         viewModelScope.launch {
+            if (backendApiRepository.isAuthenticated()) {
+                backendApiRepository.logout().onFailure {
+                    android.util.Log.w("AuthViewModel", "Backend logout failed: ${it.message}")
+                }
+            }
             authRepository.signOut()
             _authState.value = AuthState.Unauthenticated
             _uiState.value = AuthUiState() // Reset UI state

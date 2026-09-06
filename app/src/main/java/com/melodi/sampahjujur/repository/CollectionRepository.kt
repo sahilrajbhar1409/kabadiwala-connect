@@ -18,6 +18,7 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.melodi.sampahjujur.api.BackendCreateLotRequest
 
 data class CollectionEarningsSummary(
     val totalEarnings: Double = 0.0,
@@ -30,6 +31,50 @@ data class CollectionEarningsSummary(
     val cashEarnings: Double = 0.0,
     val upiEarnings: Double = 0.0
 )
+
+private fun currentBackendCategory(category: String?): String =
+    category?.trim()?.takeIf { it.isNotEmpty() }?.uppercase()?.replace(' ', '_') ?: "MIXED_PLASTICS"
+
+private fun Map<String, Any?>.backendLotNumber(): String? {
+    val lot = this["lot"] as? Map<*, *> ?: this
+    return (lot["lotNumber"] ?: lot["id"] ?: lot["_id"])?.toString()
+}
+
+private fun Map<String, Any?>.toRecyclerOrNull(): Recycler? {
+    val user = this["user"] as? Map<*, *>
+    val id = (this["id"] ?: this["_id"] ?: user?.get("id") ?: user?.get("_id"))?.toString()
+        ?: return null
+    val accepted = (this["acceptedMaterials"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
+    return Recycler(
+        id = id,
+        name = (user?.get("name") ?: this["companyName"] ?: this["name"])?.toString().orEmpty(),
+        businessName = this["companyName"]?.toString().orEmpty(),
+        facilityLocation = this["facilityLocation"]?.toString()
+            ?: user?.get("generalLocation")?.toString().orEmpty(),
+        contactPhone = (this["contactPhone"] ?: user?.get("phone"))?.toString().orEmpty(),
+        email = (this["contactEmail"] ?: user?.get("email"))?.toString().orEmpty(),
+        authorizationStatus = if (this["isVerified"] == true) "AUTHORIZED"
+        else this["authorizationStatus"]?.toString() ?: "PENDING",
+        licenseNumber = this["authorizationNumber"]?.toString().orEmpty(),
+        acceptedMaterials = accepted,
+        pickupAvailable = this["pickupAvailable"] as? Boolean ?: true,
+        serviceArea = (this["serviceAreas"] as? List<*>)?.joinToString().orEmpty()
+    )
+}
+
+private fun Map<String, Any?>.backendId(): String? =
+    (this["id"] ?: this["_id"] ?: this["transactionReference"])?.toString()
+
+private fun Map<String, Any?>.referencesLot(lotId: String): Boolean {
+    val lot = this["lot"] as? Map<*, *>
+    return listOf(
+        this["lot"],
+        this["lotId"],
+        lot?.get("id"),
+        lot?.get("_id"),
+        lot?.get("lotNumber")
+    ).any { it?.toString() == lotId }
+}
 
 /**
  * Primary repository for Person 4 (SIH 26229: Kabadiwala Connect).
@@ -45,7 +90,8 @@ class CollectionRepository @Inject constructor(
     private val collectionRequestDao: CollectionRequestDao,
     private val handoverRecordDao: HandoverRecordDao,
     private val syncManager: SyncManager,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val backendApiRepository: BackendApiRepository
 ) {
     companion object {
         private const val TAG = "CollectionRepository"
@@ -69,7 +115,7 @@ class CollectionRepository @Inject constructor(
         notes: String = ""
     ): Result<CollectionRequest> {
         return try {
-            val lotId = LotIdGenerator.generateLotId()
+            val localLotId = LotIdGenerator.generateLotId()
             val requestId = UUID.randomUUID().toString()
 
             // Safe single-event GPS capture
@@ -96,7 +142,7 @@ class CollectionRepository @Inject constructor(
 
             val request = CollectionRequest(
                 id = requestId,
-                lotId = lotId,
+                lotId = localLotId,
                 collectorId = collectorId,
                 materials = materials,
                 totalWeight = approximateWeight,
@@ -111,24 +157,50 @@ class CollectionRepository @Inject constructor(
                 isSynced = false
             )
 
+            val backendLotId = if (backendApiRepository.isAuthenticated()) {
+                val backendResult = backendApiRepository.createLot(
+                    BackendCreateLotRequest(
+                        materialCategory = currentBackendCategory(materials.firstOrNull()?.category),
+                        materialDescription = materials.firstOrNull()?.description ?: notes,
+                        approximateWeight = approximateWeight,
+                        city = address,
+                        address = address,
+                        latitude = lat,
+                        longitude = lng,
+                        notes = notes
+                    )
+                )
+                backendResult.exceptionOrNull()?.let {
+                    Log.w(TAG, "Backend lot creation failed; retaining local request: ${it.message}")
+                }
+                backendResult.getOrNull()?.backendLotNumber()
+            } else {
+                null
+            }
+            val persistedRequest = if (!backendLotId.isNullOrBlank()) {
+                request.copy(lotId = backendLotId)
+            } else {
+                request
+            }
+
             // 1. Save to Room database immediately
-            val entity = CollectionRequestEntity.fromCollectionRequest(request, isSynced = false)
+            val entity = CollectionRequestEntity.fromCollectionRequest(persistedRequest, isSynced = false)
             collectionRequestDao.insert(entity)
 
             // 2. Sync to Firestore if online
             if (syncManager.isOnline()) {
                 try {
                     firestore.collection(COLLECTION_REQUESTS)
-                        .document(lotId)
-                        .set(request)
+                        .document(persistedRequest.lotId)
+                        .set(persistedRequest)
                         .await()
-                    collectionRequestDao.markAsSynced(lotId)
+                    collectionRequestDao.markAsSynced(persistedRequest.lotId)
                 } catch (e: Exception) {
                     Log.w(TAG, "Firestore sync deferred: ${e.message}")
                 }
             }
 
-            Result.success(request)
+            Result.success(persistedRequest)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create collection request", e)
             Result.failure(e)
@@ -141,6 +213,17 @@ class CollectionRepository @Inject constructor(
      */
     suspend fun getAuthorizedRecyclers(): List<Recycler> {
         return try {
+            if (backendApiRepository.isAuthenticated()) {
+                val backendResult = backendApiRepository.recyclers()
+                backendResult.exceptionOrNull()?.let {
+                    Log.w(TAG, "Backend recycler lookup failed; using local catalog: ${it.message}")
+                }
+                val backendRecyclers = backendResult.getOrNull()
+                    ?.mapNotNull { it.toRecyclerOrNull() }
+                    ?.filter { it.isAuthorized() }
+                    .orEmpty()
+                if (backendRecyclers.isNotEmpty()) return backendRecyclers
+            }
             if (syncManager.isOnline()) {
                 val snapshot = firestore.collection(RECYCLERS_COLLECTION)
                     .whereEqualTo("authorizationStatus", "AUTHORIZED")
@@ -351,6 +434,8 @@ class CollectionRepository @Inject constructor(
                 }
             }
 
+            syncBackendHandover(lotId, actualWeight, loc, lat, lng)
+
             Result.success(record)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initiate handover", e)
@@ -516,6 +601,8 @@ class CollectionRepository @Inject constructor(
                 collectionRequestDao.markAsSynced(lotId)
             }
 
+            syncBackendPayment(lotId, amount, PaymentMethod.CASH.name, updatedReq.paymentReference)
+
             Result.success(updatedReq)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to record cash payment", e)
@@ -573,10 +660,59 @@ class CollectionRepository @Inject constructor(
                 collectionRequestDao.markAsSynced(lotId)
             }
 
+            syncBackendPayment(lotId, amount, PaymentMethod.UPI.name, upiReference)
+
             Result.success(updatedReq)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to record UPI payment", e)
             Result.failure(e)
+        }
+
+    }
+
+    private suspend fun backendTransactionId(lotId: String): String? {
+        if (!backendApiRepository.isAuthenticated()) return null
+        val transactions = backendApiRepository.transactions().getOrNull().orEmpty()
+        return transactions.firstOrNull { it.referencesLot(lotId) }?.backendId()
+    }
+
+    private suspend fun syncBackendHandover(
+        lotId: String,
+        weight: Double,
+        address: String,
+        latitude: Double,
+        longitude: Double
+    ) {
+        val transactionId = backendTransactionId(lotId) ?: return
+        backendApiRepository.createHandover(
+            com.melodi.sampahjujur.api.BackendHandoverRequest(
+                transactionId = transactionId,
+                weight = weight,
+                address = address,
+                latitude = latitude,
+                longitude = longitude
+            )
+        ).exceptionOrNull()?.let {
+            Log.w(TAG, "Backend handover sync failed; local handover retained: ${it.message}")
+        }
+    }
+
+    private suspend fun syncBackendPayment(
+        lotId: String,
+        amount: Double,
+        method: String,
+        reference: String?
+    ) {
+        val transactionId = backendTransactionId(lotId) ?: return
+        backendApiRepository.createPayment(
+            com.melodi.sampahjujur.api.BackendPaymentRequest(
+                transactionId = transactionId,
+                amount = amount,
+                paymentMethod = method,
+                paymentReference = reference
+            )
+        ).exceptionOrNull()?.let {
+            Log.w(TAG, "Backend payment sync failed; local payment retained: ${it.message}")
         }
     }
 
