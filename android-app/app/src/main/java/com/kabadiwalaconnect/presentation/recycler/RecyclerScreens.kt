@@ -41,7 +41,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,6 +54,9 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.kabadiwalaconnect.data.SessionState
 import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
+import com.kabadiwalaconnect.data.backend.BackendNetwork
+import com.kabadiwalaconnect.data.backend.BackendHandoverRequest
+import com.kabadiwalaconnect.data.backend.BackendPaymentRequest
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.model.PaymentMethod
@@ -66,13 +71,21 @@ import com.kabadiwalaconnect.ui.theme.GreenDark
 import com.kabadiwalaconnect.ui.theme.GreenLight
 import com.kabadiwalaconnect.ui.theme.TextMuted
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 private val recyclerId: String
     get() = SessionState.RECYCLER_ID
 
 @Composable
 fun RecyclerDashboardScreen(nav: NavHostController) {
+    val context = LocalContext.current
+    val backend = remember { BackendNetwork.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
+    LaunchedEffect(Unit) {
+        backend.dashboard("recycler").onFailure { backend.logFailure("recycler dashboard", it) }
+        backend.lots().onFailure { backend.logFailure("recycler lots", it) }
+        backend.offers().onFailure { backend.logFailure("recycler offers", it) }
+    }
     val available = repository.getAvailableRecyclerLots().size
     val incoming = repository.getIncomingLots(recyclerId).size
     val processed = repository.getRecyclerHistory(recyclerId).size
@@ -232,6 +245,9 @@ private fun RecyclerLotCard(lot: Lot, onOpen: () -> Unit) {
 
 @Composable
 fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val backend = remember { BackendNetwork.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
     var lot by remember(lotId) { mutableStateOf(lotId?.let(repository::getLot)) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -262,6 +278,31 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                                             repository.assignRecycler(current.lotId, recyclerId)
                                         }
                                         lot = repository.confirmRecyclerReceipt(current.lotId, recyclerId)
+                                        scope.launch {
+                                            val transaction = backend.transactions().getOrNull()
+                                                ?.firstOrNull { transaction ->
+                                                    val lot = transaction["lot"] as? Map<*, *>
+                                                    listOf(
+                                                        transaction["lotId"],
+                                                        transaction["lot"],
+                                                        lot?.get("id"),
+                                                        lot?.get("_id"),
+                                                        lot?.get("lotNumber")
+                                                    ).any { it?.toString() == current.lotId }
+                                                }
+                                            val transactionId = transaction?.let {
+                                                (it["id"] ?: it["_id"] ?: it["transactionReference"])?.toString()
+                                            }
+                                            if (transactionId != null) {
+                                                backend.createHandover(
+                                                    BackendHandoverRequest(
+                                                        transactionId = transactionId,
+                                                        weight = current.actualWeight ?: current.estimatedWeight,
+                                                        address = current.handoverLocation.orEmpty()
+                                                    )
+                                                ).onFailure { backend.logFailure("handover confirmation", it) }
+                                            }
+                                        }
                                         error = null
                                     } catch (exception: Exception) {
                                         error = exception.message ?: "Unable to confirm this lot."
@@ -289,6 +330,26 @@ fun RecyclerLotDetailsScreen(nav: NavHostController, lotId: String?) {
                                     try {
                                         repository.payRecycler(current.lotId, recyclerId, paymentMethod)
                                         lot = repository.getLot(current.lotId)
+                                        scope.launch {
+                                            val transaction = backend.transactions().getOrNull()
+                                                ?.firstOrNull { transaction ->
+                                                    val lot = transaction["lot"] as? Map<*, *>
+                                                    listOf(transaction["lotId"], transaction["lot"], lot?.get("id"), lot?.get("_id"), lot?.get("lotNumber"))
+                                                        .any { it?.toString() == current.lotId }
+                                                }
+                                            val transactionId = transaction?.let {
+                                                (it["id"] ?: it["_id"] ?: it["transactionReference"])?.toString()
+                                            }
+                                            if (transactionId != null) {
+                                                backend.createPayment(
+                                                    BackendPaymentRequest(
+                                                        transactionId = transactionId,
+                                                        amount = current.actualValue ?: current.estimatedValue,
+                                                        paymentMethod = paymentMethod.name
+                                                    )
+                                                ).onFailure { backend.logFailure("payment", it) }
+                                            }
+                                        }
                                         error = null
                                     } catch (exception: Exception) {
                                         error = exception.message ?: "Unable to complete payment."

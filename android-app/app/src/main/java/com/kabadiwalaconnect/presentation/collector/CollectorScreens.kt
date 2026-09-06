@@ -57,8 +57,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
 import com.kabadiwalaconnect.data.SessionState
 import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
+import com.kabadiwalaconnect.data.backend.BackendNetwork
 import com.kabadiwalaconnect.data.model.CollectionRequest
 import com.kabadiwalaconnect.data.model.Lot
 import com.kabadiwalaconnect.data.model.LotStatus
@@ -78,7 +80,13 @@ private const val RECYCLER_ID = "recycler-session"
 
 @Composable
 fun CollectorDashboardScreen(nav: NavHostController) {
+    val context = LocalContext.current
+    val backend = remember { BackendNetwork.create(context) }
     val repository = remember { CollectionRepositoryProvider.instance }
+    LaunchedEffect(Unit) {
+        backend.dashboard("collector").onFailure { backend.logFailure("collector dashboard", it) }
+        backend.lots(status = "OPEN").onFailure { backend.logFailure("collector lots", it) }
+    }
     val pending = repository.getPendingCollectionRequests().size
     val collectorLots = repository.getCollectorLots(SessionState.COLLECTOR_ID)
     val accepted = collectorLots.count { it.status == LotStatus.ACCEPTED }

@@ -9,25 +9,35 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.kabadiwalaconnect.data.backend.BackendNetwork
 import com.kabadiwalaconnect.navigation.Routes
 import com.kabadiwalaconnect.ui.components.AppTopBar
 import com.kabadiwalaconnect.ui.components.RealTimeMap
 import com.kabadiwalaconnect.ui.components.rememberCurrentLocation
 import com.kabadiwalaconnect.ui.theme.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun PickupScreen(nav: NavHostController) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val viewModel = remember {
+        PickupViewModel(backendRepository = BackendNetwork.create(context))
+    }
     var selectedMaterial by remember { mutableStateOf("Paper") }
     var quantity by remember { mutableStateOf("") }
+    var submitting by remember { mutableStateOf(false) }
     val location = rememberCurrentLocation()
 
     Scaffold(
@@ -127,10 +137,30 @@ fun PickupScreen(nav: NavHostController) {
             }
             item {
                 Button(
-                    onClick = { nav.navigate(Routes.TRACKING) },
+                    onClick = {
+                        val weight = quantity.toDoubleOrNull()
+                        if (weight == null || weight <= 0 || submitting) return@Button
+                        submitting = true
+                        scope.launch {
+                            val result = viewModel.submitToBackend(
+                                materialId = selectedMaterial,
+                                estimatedWeight = weight,
+                                estimatedValue = 0.0,
+                                pickupAddress = "Current location",
+                                latitude = location?.latitude ?: 0.0,
+                                longitude = location?.longitude ?: 0.0
+                            )
+                            submitting = false
+                            if (result != null) nav.navigate(Routes.tracking(result.lot.lotId))
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(15.dp)
-                ) { Text("Confirm pickup", fontWeight = FontWeight.Bold) }
+                    shape = RoundedCornerShape(15.dp),
+                    enabled = !submitting
+                ) {
+                    if (submitting) CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    else Text("Confirm pickup", fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import com.kabadiwalaconnect.data.backend.BackendNetwork
 import androidx.navigation.NavHostController
 import com.kabadiwalaconnect.data.model.LotStatus
 import com.kabadiwalaconnect.data.repository.PriceServiceProvider
@@ -33,7 +36,14 @@ import java.util.Locale
 
 @Composable
 fun TraceabilityScreen(nav: NavHostController, lotId: String? = null) {
+    val context = LocalContext.current
     val state = remember(lotId) { TraceabilityViewModel().load(lotId) }
+    val backend = remember { BackendNetwork.create(context) }
+    LaunchedEffect(state.lot?.lotId) {
+        state.lot?.lotId?.let {
+            backend.trace(it).onFailure { error -> backend.logFailure("traceability", error) }
+        }
+    }
     val lot = state.lot
     val material = lot?.let { PriceServiceProvider.instance.findMaterial(it.materialId)?.name }
     val totalRecovered = state.repositoryLots.sumOf { it.actualWeight ?: 0.0 }

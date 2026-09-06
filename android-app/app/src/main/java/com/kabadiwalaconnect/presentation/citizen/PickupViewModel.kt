@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.kabadiwalaconnect.data.SessionState
+import com.kabadiwalaconnect.data.backend.BackendApiRepository
+import com.kabadiwalaconnect.data.backend.BackendCreateLotRequest
 import com.kabadiwalaconnect.data.model.AiPrediction
 import com.kabadiwalaconnect.data.model.CollectionRequest
 import com.kabadiwalaconnect.data.model.CollectionRequestStatus
@@ -29,7 +31,8 @@ data class PickupResult(
  */
 class PickupViewModel(
     private val repository: CollectionRepository = CollectionRepositoryProvider.instance,
-    private val aiService: AiDemoService = AiDemoServiceProvider.instance
+    private val aiService: AiDemoService = AiDemoServiceProvider.instance,
+    private val backendRepository: BackendApiRepository? = null
 ) {
     var prediction by mutableStateOf<AiPrediction?>(null)
         private set
@@ -114,6 +117,44 @@ class PickupViewModel(
             errorMessage = exception.message ?: "We couldn't save your pickup request."
             null
         }
+
+    }
+
+    suspend fun submitToBackend(
+        materialId: String,
+        estimatedWeight: Double,
+        estimatedValue: Double,
+        pickupAddress: String,
+        latitude: Double,
+        longitude: Double
+    ): PickupResult? {
+        val result = submit(
+            materialId,
+            estimatedWeight,
+            estimatedValue,
+            pickupAddress,
+            latitude,
+            longitude
+        ) ?: return null
+        val backend = backendRepository
+        if (backend != null) {
+            val response = backend.createLot(
+                BackendCreateLotRequest(
+                    materialCategory = materialId.uppercase().replace(' ', '_'),
+                    materialDescription = "Pickup request from Kabadiwala Connect",
+                    approximateWeight = estimatedWeight,
+                    address = pickupAddress,
+                    latitude = latitude,
+                    longitude = longitude,
+                    notes = "AI prediction: ${prediction?.modelVersion ?: "not available"}",
+                    clientGeneratedId = result.lot.lotId
+                )
+            )
+            response.exceptionOrNull()?.let {
+                backend.logFailure("lot creation", it)
+            }
+        }
+        return result
     }
 }
 
