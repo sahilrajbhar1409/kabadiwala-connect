@@ -41,9 +41,16 @@ android {
 
 dependencies {
 
-    implementation("org.osmdroid:osmdroid-android:6.1.20")
+     // Backend API
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
+    // Location
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // OpenStreetMap
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     implementation("androidx.navigation:navigation-compose:2.9.3")
 
@@ -68,3 +75,4 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
+
