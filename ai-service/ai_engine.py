@@ -1,6 +1,7 @@
 import io
 from PIL import Image
-from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from typing import Optional
 
 app = FastAPI(
     title="Kabadiwala Connect - AI & Valuation Engine",
@@ -29,11 +30,24 @@ def home():
 async def analyze_scrap(
     image: UploadFile = File(...),
     weight_kg: float = Form(...),
-    actual_price: float = Form(...)
+    actual_price: float = Form(...),
+    benchmark_rate_per_kg: Optional[float] = Form(None)
 ):
+    if weight_kg <= 0:
+        raise HTTPException(status_code=422, detail="weight_kg must be greater than 0")
+    if actual_price < 0:
+        raise HTTPException(status_code=422, detail="actual_price must not be negative")
+    if benchmark_rate_per_kg is not None and benchmark_rate_per_kg < 0:
+        raise HTTPException(status_code=422, detail="benchmark_rate_per_kg must not be negative")
+
     # 1. Read Image
     contents = await image.read()
-    img = Image.open(io.BytesIO(contents))
+    try:
+        img = Image.open(io.BytesIO(contents))
+        img.verify()
+        img = Image.open(io.BytesIO(contents))
+    except Exception as error:
+        raise HTTPException(status_code=422, detail="image must be a valid readable image") from error
     width, height = img.size
 
     # 2. Material Classification (With Confidence Score)
@@ -48,7 +62,9 @@ async def analyze_scrap(
             break
 
     # 3. Approximate Valuation Calculation
-    benchmark_rate = MARKET_RATES.get(detected_material, 20.0)
+    # The backend supplies the canonical online rate. MARKET_RATES remains only
+    # as a compatibility fallback for standalone local callers.
+    benchmark_rate = benchmark_rate_per_kg or MARKET_RATES.get(detected_material, 20.0)
     expected_price = round(benchmark_rate * weight_kg, 2)
 
     # 4. Compare Expected vs Actual Price (Fraud / Deviation Check)

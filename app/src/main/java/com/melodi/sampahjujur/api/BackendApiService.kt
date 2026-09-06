@@ -28,6 +28,38 @@ data class BackendUser(
     val isActive: Boolean = true
 )
 
+data class BackendPriceQuote(
+    val category: String = "",
+    val location: String = "India",
+    val currentPrice: Double = 0.0,
+    val minPrice: Double = 0.0,
+    val maxPrice: Double = 0.0,
+    val unit: String = "kg",
+    val source: String = "",
+    val recordedAt: String? = null,
+    val method: String? = null,
+    val approximateWeight: Double? = null,
+    val estimatedValue: Double? = null,
+    val estimatedPriceRange: BackendPriceRange? = null
+)
+
+data class BackendPriceRange(
+    val min: Double = 0.0,
+    val max: Double = 0.0
+)
+
+data class BackendPriceHistory(
+    val id: String? = null,
+    val category: String = "",
+    val location: String = "India",
+    val price: Double = 0.0,
+    val minPrice: Double = 0.0,
+    val maxPrice: Double = 0.0,
+    val unit: String = "kg",
+    val source: String = "",
+    val recordedAt: String? = null
+)
+
 data class BackendAuthData(
     val token: String = "",
     val user: BackendUser = BackendUser()
@@ -36,6 +68,13 @@ data class BackendAuthData(
 data class BackendLoginRequest(
     val identifier: String,
     val password: String
+)
+
+data class BackendFirebaseLoginRequest(
+    val idToken: String,
+    val name: String,
+    val phone: String,
+    val role: String
 )
 
 data class BackendRegisterRequest(
@@ -64,6 +103,41 @@ data class BackendCreateLotRequest(
     val longitude: Double? = null,
     val notes: String = "",
     val photos: List<String> = emptyList()
+)
+
+data class BackendAnalyzeLotRequest(
+    val imageUrl: String,
+    val weightKg: Double,
+    val actualPrice: Double
+)
+
+data class BackendLotAnalysis(
+    val lotId: String = "",
+    val lotNumber: String = "",
+    val classification: BackendClassification = BackendClassification(),
+    val valuation: BackendValuation = BackendValuation(),
+    val fraudAudit: BackendFraudAudit = BackendFraudAudit(),
+    val analyzedAt: String? = null
+)
+
+data class BackendClassification(
+    val detected_material: String = "",
+    val confidence_score: String = "",
+    val image_resolution: String = "",
+    val status: String = ""
+)
+
+data class BackendValuation(
+    val benchmark_rate_per_kg: Double = 0.0,
+    val weight_kg: Double = 0.0,
+    val expected_fair_price: Double = 0.0,
+    val actual_transaction_price: Double = 0.0
+)
+
+data class BackendFraudAudit(
+    val is_flagged: Boolean = false,
+    val deviation_percentage: String = "",
+    val system_verdict: String = ""
 )
 
 data class BackendCreateOfferRequest(
@@ -105,6 +179,9 @@ interface BackendApiService {
     @POST("auth/login")
     suspend fun login(@Body request: BackendLoginRequest): Response<BackendEnvelope<BackendAuthData>>
 
+    @POST("auth/firebase")
+    suspend fun firebaseLogin(@Body request: BackendFirebaseLoginRequest): Response<BackendEnvelope<BackendAuthData>>
+
     @GET("auth/me")
     suspend fun currentUser(): Response<BackendEnvelope<Map<String, Any?>>>
 
@@ -125,13 +202,13 @@ interface BackendApiService {
         @Query("category") category: String? = null,
         @Query("location") location: String? = null,
         @Query("weight") weight: Double? = null
-    ): Response<BackendEnvelope<Any>>
+    ): Response<BackendEnvelope<BackendPriceQuote>>
 
     @GET("prices/trends")
     suspend fun priceTrends(
         @Query("category") category: String? = null,
         @Query("limit") limit: Int? = null
-    ): Response<BackendEnvelope<Any>>
+    ): Response<BackendEnvelope<List<BackendPriceHistory>>>
 
     @POST("lots")
     suspend fun createLot(@Body request: BackendCreateLotRequest): Response<BackendEnvelope<Map<String, Any?>>>
@@ -147,6 +224,12 @@ interface BackendApiService {
 
     @GET("lots/{id}/matches")
     suspend fun lotMatches(@Path("id") id: String): Response<BackendEnvelope<Any>>
+
+    @POST("lots/{id}/analyze")
+    suspend fun analyzeLot(
+        @Path("id") id: String,
+        @Body request: BackendAnalyzeLotRequest
+    ): Response<BackendEnvelope<BackendLotAnalysis>>
 
     @PATCH("lots/{id}")
     suspend fun updateLot(

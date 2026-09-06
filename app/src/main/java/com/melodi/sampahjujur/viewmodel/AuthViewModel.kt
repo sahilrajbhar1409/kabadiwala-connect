@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,6 +45,12 @@ class AuthViewModel @Inject constructor(
     private var resendToken: PhoneAuthProvider.ForceResendingToken? = null
 
     init {
+        viewModelScope.launch {
+            backendApiRepository.sessionInvalidated.collect {
+                authRepository.signOut()
+                _authState.value = AuthState.Unauthenticated
+            }
+        }
         checkAuthState()
     }
 
@@ -57,6 +64,9 @@ class AuthViewModel @Inject constructor(
             if (authRepository.isSignedIn()) {
                 val user = authRepository.getCurrentUser()
                 if (user != null) {
+                    if (user.isCollector() && !backendApiRepository.isAuthenticated()) {
+                        establishBackendSession(user)
+                    }
                     _authState.value = AuthState.Authenticated(user)
                 } else {
                     _authState.value = AuthState.Unauthenticated
@@ -167,6 +177,7 @@ class AuthViewModel @Inject constructor(
 
             if (result.isSuccess) {
                 val user = result.getOrNull()!!
+                establishBackendSession(user)
                 _authState.value = AuthState.Authenticated(user)
                 _uiState.value = _uiState.value.copy(isLoading = false)
             } else {
@@ -203,6 +214,7 @@ class AuthViewModel @Inject constructor(
 
             if (result.isSuccess) {
                 val user = result.getOrNull()!!
+                establishBackendSession(user)
                 _authState.value = AuthState.Authenticated(user)
                 _uiState.value = _uiState.value.copy(isLoading = false)
                 _phoneAuthState.value = PhoneAuthState.Idle
@@ -216,6 +228,23 @@ class AuthViewModel @Inject constructor(
                 )
             }
         }
+    }
+
+    private suspend fun establishBackendSession(user: User) {
+        authRepository.getBackendIdentityToken()
+            .onSuccess { idToken ->
+                backendApiRepository.firebaseLogin(
+                    idToken = idToken,
+                    name = user.fullName,
+                    phone = user.phone,
+                    role = "collector"
+                ).onFailure {
+                    android.util.Log.w("AuthViewModel", "Backend session unavailable for Firebase identity")
+                }
+            }
+            .onFailure {
+                android.util.Log.w("AuthViewModel", "Firebase identity token unavailable for backend session")
+            }
     }
 
     /**

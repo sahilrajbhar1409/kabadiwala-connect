@@ -8,6 +8,20 @@ const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
 const { notify } = require('../utils/notify');
 
+const formatOffer = (offer, user) => {
+  const formatted = offer.toObject ? offer.toObject() : offer;
+  if (user.role === 'recycler' && formatted.status !== 'ACCEPTED' && formatted.lot) {
+    formatted.lot.location = { city: formatted.lot.location?.city || '' };
+    if (formatted.lot.collector) {
+      formatted.lot.collector = {
+        name: formatted.lot.collector.name,
+        generalLocation: formatted.lot.collector.generalLocation || '',
+      };
+    }
+  }
+  return formatted;
+};
+
 const createOffer = asyncHandler(async (req, res) => {
   const lot = await Lot.findById(req.body.lotId || req.body.lot);
   if (!lot) throw new ApiError(404, 'Lot not found');
@@ -60,13 +74,20 @@ const listOffers = asyncHandler(async (req, res) => {
     .populate('lot')
     .populate('recycler', 'name phone')
     .sort({ createdAt: -1 });
-  return success(res, { message: 'Offers', data: offers });
+  return success(res, { message: 'Offers', data: offers.map((offer) => formatOffer(offer, req.user)) });
 });
 
 const getOffer = asyncHandler(async (req, res) => {
   const offer = await Offer.findById(req.params.id).populate('lot').populate('recycler', 'name phone');
   if (!offer) throw new ApiError(404, 'Offer not found');
-  return success(res, { message: 'Offer', data: offer });
+  const lot = offer.lot;
+  if (req.user.role === 'collector' && lot.collector.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, 'Not your lot offer');
+  }
+  if (req.user.role === 'recycler' && offer.recycler._id.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, 'Not your offer');
+  }
+  return success(res, { message: 'Offer', data: formatOffer(offer, req.user) });
 });
 
 const updateOffer = asyncHandler(async (req, res) => {

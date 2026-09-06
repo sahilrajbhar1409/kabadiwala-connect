@@ -92,17 +92,7 @@ cloudinary.upload.folder=sampah-jujur
 
 # Notification Server
 notification.server.url=http://your-server-url:3000
-
-# Express backend (Android emulator)
-api.base.url=http://10.0.2.2:5000/api/
 ```
-
-`api.base.url` must end with `/` for Retrofit. Use the host machine LAN IP
-instead of `10.0.2.2` on a physical device. Firebase Auth/Firestore remains
-the existing mobile identity and realtime/offline path; the Express client
-uses its own JWT returned by `/api/auth/login` or `/api/auth/register`. A
-Firebase ID token is not accepted as an Express JWT without a server-side
-Firebase Admin credential.
 
 ### 4. Build the Project
 

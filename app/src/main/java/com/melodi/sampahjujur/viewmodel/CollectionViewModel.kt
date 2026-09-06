@@ -13,6 +13,18 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private fun Any?.asDouble(fallback: Double): Double = when (this) {
+    is Number -> toDouble()
+    is String -> toDoubleOrNull() ?: fallback
+    else -> fallback
+}
+
+private fun Any?.asInt(fallback: Int): Int = when (this) {
+    is Number -> toInt()
+    is String -> toIntOrNull() ?: fallback
+    else -> fallback
+}
+
 data class CollectionUiState(
     val isLoading: Boolean = false,
     val isCapturingLocation: Boolean = false,
@@ -64,10 +76,27 @@ class CollectionViewModel @Inject constructor(
     private fun refreshBackendData() {
         if (!backendApiRepository.isAuthenticated()) return
         viewModelScope.launch {
-            val result = backendApiRepository.offers()
-            if (result.isFailure) {
+            val offersResult = backendApiRepository.offers()
+            val dashboardResult = backendApiRepository.dashboard("collector")
+            if (offersResult.isFailure || dashboardResult.isFailure) {
                 _uiState.update {
-                    it.copy(errorMessage = result.exceptionOrNull()?.message ?: "Unable to load backend offers")
+                    it.copy(
+                        errorMessage = offersResult.exceptionOrNull()?.message
+                            ?: dashboardResult.exceptionOrNull()?.message
+                            ?: "Unable to load backend collector data"
+                    )
+                }
+            }
+
+            dashboardResult.getOrNull()?.let { dashboard ->
+                _earningsSummary.update { current ->
+                    current.copy(
+                        totalEarnings = dashboard["totalEarnings"].asDouble(current.totalEarnings),
+                        completedEarnings = dashboard["totalEarnings"].asDouble(current.completedEarnings),
+                        transactionCount = dashboard["totalLots"].asInt(current.transactionCount),
+                        completedCount = dashboard["completedTransactions"].asInt(current.completedCount),
+                        pendingCount = dashboard["pendingPayments"].asInt(current.pendingCount)
+                    )
                 }
             }
         }
@@ -139,6 +168,27 @@ class CollectionViewModel @Inject constructor(
                     }
                 }
         }
+
+        if (backendApiRepository.isAuthenticated()) {
+            viewModelScope.launch {
+                collectionRepository.loadBackendRecyclerRequests()
+                    .onSuccess { requests ->
+                        _uiState.update { current ->
+                            current.copy(
+                                recyclerRequests = requests,
+                                filteredRecyclerRequests = applyFilter(
+                                    requests,
+                                    current.recyclerSearchQuery,
+                                    current.recyclerStatusFilter
+                                )
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        _uiState.update { it.copy(errorMessage = error.message ?: "Unable to load backend lots") }
+                    }
+            }
+        }
     }
 
     fun generateNewLotIdPreview() {
@@ -200,7 +250,10 @@ class CollectionViewModel @Inject constructor(
         }
     }
 
-    fun createCollectionRequest(onSuccess: (String) -> Unit) {
+    fun createCollectionRequest(
+        photoReferences: List<String> = emptyList(),
+        onSuccess: (String) -> Unit
+    ) {
         viewModelScope.launch {
             val currentState = _uiState.value
             val weight = currentState.inputWeight.toDoubleOrNull() ?: 0.0
@@ -232,7 +285,8 @@ class CollectionViewModel @Inject constructor(
                 materials = listOf(material),
                 approximateWeight = weight,
                 quotedPrice = estimatedVal,
-                notes = currentState.inputNotes
+                notes = currentState.inputNotes,
+                photoReferences = photoReferences
             )
 
             if (result.isSuccess) {
@@ -439,9 +493,23 @@ class CollectionViewModel @Inject constructor(
     fun acceptRequestByRecycler(lotId: String, onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val result = collectionRepository.acceptRequest(lotId)
+            val result = if (backendApiRepository.isAuthenticated()) {
+                collectionRepository.submitBackendOffer(lotId)
+            } else {
+                collectionRepository.acceptRequest(lotId).map { Unit }
+            }
             if (result.isSuccess) {
-                _uiState.update { it.copy(isLoading = false, successMessage = "Lot $lotId accepted by Recycler") }
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        successMessage = if (backendApiRepository.isAuthenticated()) {
+                            "Offer submitted for Lot $lotId; awaiting collector acceptance"
+                        } else {
+                            "Lot $lotId accepted by Recycler"
+                        }
+                    )
+                }
+                if (backendApiRepository.isAuthenticated()) observeRecyclerData(_uiState.value.selectedRecyclerId)
                 onSuccess()
             } else {
                 _uiState.update { it.copy(isLoading = false, errorMessage = result.exceptionOrNull()?.message ?: "Failed to accept request") }
@@ -452,7 +520,11 @@ class CollectionViewModel @Inject constructor(
     fun rejectRequestByRecycler(lotId: String, reason: String = "Rejected by Facility", onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val result = collectionRepository.rejectRequest(lotId, reason)
+            val result = if (backendApiRepository.isAuthenticated()) {
+                collectionRepository.rejectBackendOffer(lotId)
+            } else {
+                collectionRepository.rejectRequest(lotId, reason).map { Unit }
+            }
             if (result.isSuccess) {
                 _uiState.update { it.copy(isLoading = false, successMessage = "Lot $lotId rejected") }
                 onSuccess()

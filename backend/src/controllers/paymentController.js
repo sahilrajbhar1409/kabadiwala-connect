@@ -56,6 +56,9 @@ const listPayments = asyncHandler(async (req, res) => {
 const getPayment = asyncHandler(async (req, res) => {
   const row = await Payment.findById(req.params.id).populate('transaction');
   if (!row) throw new ApiError(404, 'Payment not found');
+  if (req.user.role !== 'admin' && ![row.collector.toString(), row.recycler.toString()].includes(req.user._id.toString())) {
+    throw new ApiError(403, 'Not allowed');
+  }
   return success(res, { message: 'Payment', data: row });
 });
 

@@ -23,6 +23,16 @@ const locationSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const aiAnalysisSchema = new mongoose.Schema(
+  {
+    classification: { type: mongoose.Schema.Types.Mixed, required: true },
+    valuation: { type: mongoose.Schema.Types.Mixed, required: true },
+    fraudAudit: { type: mongoose.Schema.Types.Mixed, required: true },
+    analyzedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const lotSchema = new mongoose.Schema(
   {
     lotNumber: { type: String, required: true, unique: true },
@@ -44,6 +54,7 @@ const lotSchema = new mongoose.Schema(
     acceptedOffer: { type: mongoose.Schema.Types.ObjectId, ref: 'Offer', default: null },
     scheduledAt: { type: Date, default: null },
     clientGeneratedId: { type: String, default: null, index: true },
+    aiAnalysis: { type: aiAnalysisSchema, default: null },
     isDemo: { type: Boolean, default: false },
   },
   { timestamps: true }

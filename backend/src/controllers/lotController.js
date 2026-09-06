@@ -1,6 +1,7 @@
 const Lot = require('../models/Lot');
 const Material = require('../models/Material');
 const User = require('../models/User');
+const Offer = require('../models/Offer');
 const generateReferenceId = require('../utils/generateReferenceId');
 const { estimateLotValue } = require('../services/priceService');
 const { matchRecyclersForLot } = require('../services/recyclerMatchingService');
@@ -10,14 +11,27 @@ const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
 const { notify } = require('../utils/notify');
 const RecyclerProfile = require('../models/RecyclerProfile');
+const { analyzeScrap } = require('../services/aiService');
 
-const formatLot = (lot) => {
+const formatLot = (lot, { redactRecyclerLocation = false } = {}) => {
   const obj = lot.toObject ? lot.toObject() : lot;
-  return {
+  const formatted = {
     ...obj,
     id: obj._id?.toString(),
     lotNumber: obj.lotNumber,
   };
+
+  if (redactRecyclerLocation) {
+    formatted.location = { city: obj.location?.city || '' };
+    if (formatted.collector) {
+      formatted.collector = {
+        name: formatted.collector.name,
+        generalLocation: formatted.collector.generalLocation || '',
+      };
+    }
+  }
+
+  return formatted;
 };
 
 const createLot = asyncHandler(async (req, res) => {
@@ -39,7 +53,11 @@ const createLot = asyncHandler(async (req, res) => {
     location: req.body.location?.city || req.body.city,
   });
 
-  const photos = await persistUploadedFiles(req.files || []);
+  const uploadedPhotos = await persistUploadedFiles(req.files || []);
+  const referencedPhotos = Array.isArray(req.body.photos)
+    ? req.body.photos.filter((photo) => typeof photo === 'string' && /^https?:\/\//i.test(photo))
+    : [];
+  const photos = [...uploadedPhotos, ...referencedPhotos];
   const location = req.body.location
     ? (typeof req.body.location === 'string' ? JSON.parse(req.body.location) : req.body.location)
     : {
@@ -151,7 +169,12 @@ const listLots = asyncHandler(async (req, res) => {
     lots = await Lot.find(filter).populate('collector', 'name phone generalLocation').sort({ createdAt: -1 });
   }
 
-  return success(res, { message: 'Lots', data: lots.map(formatLot) });
+  return success(res, {
+    message: 'Lots',
+    data: lots.map((lot) => formatLot(lot, {
+      redactRecyclerLocation: req.user.role === 'recycler',
+    })),
+  });
 });
 
 const myLots = asyncHandler(async (req, res) => {
@@ -165,7 +188,16 @@ const getLot = asyncHandler(async (req, res) => {
   if (req.user.role === 'collector' && lot.collector._id.toString() !== req.user._id.toString()) {
     throw new ApiError(403, 'Not your lot');
   }
-  return success(res, { message: 'Lot', data: formatLot(lot) });
+  let redactRecyclerLocation = false;
+  if (req.user.role === 'recycler') {
+    const acceptedOffer = await Offer.findOne({
+      lot: lot._id,
+      recycler: req.user._id,
+      status: 'ACCEPTED',
+    });
+    redactRecyclerLocation = !acceptedOffer;
+  }
+  return success(res, { message: 'Lot', data: formatLot(lot, { redactRecyclerLocation }) });
 });
 
 const updateLot = asyncHandler(async (req, res) => {
@@ -225,4 +257,60 @@ const getMatches = asyncHandler(async (req, res) => {
   return success(res, { message: 'Recycler matches (deterministic scoring, not ML)', data: matches });
 });
 
-module.exports = { createLot, listLots, myLots, getLot, updateLot, deleteLot, getMatches };
+const analyzeLot = asyncHandler(async (req, res) => {
+  const lot = await Lot.findOne({
+    $or: [
+      ...(require('mongoose').isValidObjectId(req.params.id) ? [{ _id: req.params.id }] : []),
+      { lotNumber: req.params.id },
+    ],
+  });
+  if (!lot) throw new ApiError(404, 'Lot not found');
+  if (req.user.role === 'collector' && lot.collector.toString() !== req.user._id.toString()) {
+    throw new ApiError(403, 'Not your lot');
+  }
+
+  const imageUrl = req.body.imageUrl || lot.photos?.[0];
+  const weightKg = Number(req.body.weightKg ?? lot.approximateWeight);
+  const actualPrice = Number(req.body.actualPrice ?? lot.estimatedValue);
+  if (!imageUrl) throw new ApiError(400, 'Lot has no image available for analysis');
+  if (!Number.isFinite(weightKg) || weightKg <= 0) throw new ApiError(400, 'weightKg must be greater than 0');
+  if (!Number.isFinite(actualPrice) || actualPrice < 0) throw new ApiError(400, 'actualPrice must be a valid amount');
+
+  const quote = await estimateLotValue({
+    category: lot.materialCategory,
+    weight: weightKg,
+    location: lot.location?.city,
+  });
+  const aiResult = await analyzeScrap({
+    imageUrl,
+    weightKg,
+    actualPrice,
+    benchmarkRate: quote.currentPrice,
+  });
+
+  lot.aiAnalysis = {
+    classification: aiResult.classification,
+    valuation: {
+      ...aiResult.valuation,
+      benchmark_rate_per_kg: quote.currentPrice,
+      expected_fair_price: quote.estimatedValue,
+    },
+    fraudAudit: aiResult.fraud_audit,
+    analyzedAt: new Date(),
+  };
+  await lot.save();
+
+  return success(res, {
+    message: 'Lot analyzed successfully',
+    data: {
+      lotId: lot._id.toString(),
+      lotNumber: lot.lotNumber,
+      classification: lot.aiAnalysis.classification,
+      valuation: lot.aiAnalysis.valuation,
+      fraudAudit: lot.aiAnalysis.fraudAudit,
+      analyzedAt: lot.aiAnalysis.analyzedAt,
+    },
+  });
+});
+
+module.exports = { createLot, listLots, myLots, getLot, updateLot, deleteLot, getMatches, analyzeLot };

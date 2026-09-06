@@ -302,6 +302,16 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    suspend fun getBackendIdentityToken(): Result<String> {
+        return try {
+            val token = auth.currentUser?.getIdToken(false)?.await()?.token
+            if (token.isNullOrBlank()) Result.failure(Exception("Firebase identity token unavailable"))
+            else Result.success(token)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /**
      * Signs in a household user with Google authentication
      *

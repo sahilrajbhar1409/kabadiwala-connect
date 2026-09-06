@@ -5,6 +5,7 @@ const generateToken = require('../utils/generateToken');
 const asyncHandler = require('../utils/asyncHandler');
 const { success } = require('../utils/apiResponse');
 const { ApiError } = require('../middleware/errorMiddleware');
+const { getFirebaseAdmin } = require('../config/firebaseAdmin');
 
 const handleValidation = (req) => {
   const errors = validationResult(req);
@@ -126,6 +127,48 @@ const me = asyncHandler(async (req, res) => {
   });
 });
 
+const firebaseLogin = asyncHandler(async (req, res) => {
+  const firebaseAdmin = getFirebaseAdmin();
+  if (!firebaseAdmin) throw new ApiError(503, 'Firebase backend authentication is not configured');
+
+  const { idToken, name, phone, role } = req.body;
+  if (!idToken) throw new ApiError(400, 'Firebase ID token is required');
+  if (!['collector', 'recycler'].includes(role)) throw new ApiError(400, 'Invalid backend role');
+
+  const decoded = await firebaseAdmin.auth().verifyIdToken(idToken);
+  const email = decoded.email || '';
+  const firebasePhone = decoded.phone_number || '';
+  if (!firebasePhone) throw new ApiError(400, 'A verified phone number is required');
+
+  let user = await User.findOne({ firebaseUid: decoded.uid });
+  if (!user) user = await User.findOne({ phone: firebasePhone });
+  if (user && user.role !== role) throw new ApiError(403, 'Backend role does not match this account');
+
+  if (!user) {
+    user = await User.create({
+      firebaseUid: decoded.uid,
+      name: name || decoded.name || 'Kabadiwala user',
+      phone: firebasePhone,
+      email: email || undefined,
+      password: require('crypto').randomBytes(32).toString('hex'),
+      role,
+      generalLocation: '',
+    });
+  } else {
+    user.firebaseUid = decoded.uid;
+    if (email && !user.email) user.email = email;
+    if (name && user.name === 'Kabadiwala user') user.name = name;
+    await user.save();
+  }
+
+  if (!user.isActive) throw new ApiError(403, 'Account is inactive');
+  const token = generateToken(user._id, user.role);
+  return success(res, {
+    message: 'Firebase identity accepted',
+    data: { token, user: user.toSafeObject() },
+  });
+});
+
 const logout = asyncHandler(async (_req, res) => {
   return success(res, { message: 'Logged out.' });
 });
@@ -136,5 +179,6 @@ module.exports = {
   register,
   login,
   me,
+  firebaseLogin,
   logout,
 };

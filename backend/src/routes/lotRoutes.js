@@ -10,6 +10,7 @@ const {
   updateLot,
   deleteLot,
   getMatches,
+  analyzeLot,
 } = require('../controllers/lotController');
 
 const router = express.Router();
@@ -20,6 +21,7 @@ router.post('/', authorize('collector'), upload.array('photos', 6), createLot);
 router.get('/', listLots);
 router.get('/my-lots', authorize('collector'), myLots);
 router.get('/:id/matches', getMatches);
+router.post('/:id/analyze', authorize('collector', 'admin'), analyzeLot);
 router.get('/:id', getLot);
 router.patch('/:id', authorize('collector'), upload.array('photos', 6), updateLot);
 router.delete('/:id', authorize('collector'), deleteLot);

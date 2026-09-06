@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, minlength: 2 },
     phone: { type: String, required: true, unique: true, trim: true },
     email: { type: String, trim: true, lowercase: true, sparse: true, unique: true },
+    firebaseUid: { type: String, trim: true, sparse: true, unique: true },
     password: { type: String, required: true, minlength: 6, select: false },
     role: { type: String, enum: ['collector', 'recycler', 'admin'], required: true },
     preferredLanguage: {

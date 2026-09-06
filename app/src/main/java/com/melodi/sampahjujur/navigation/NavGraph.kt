@@ -116,6 +116,7 @@ sealed class Screen(val route: String) {
     object LanguageSelection : Screen("language_selection")
     object PrivacyPolicy : Screen("privacy_policy")
     object TermsAndConditions : Screen("terms_and_conditions")
+    object PriceBoard : Screen("price_board")
 }
 
 @Composable
@@ -549,6 +550,10 @@ fun SampahJujurNavGraph(
             )
         }
 
+        composable(Screen.PriceBoard.route) {
+            PriceBoardScreen(onBackClick = { navController.popBackStack() })
+        }
+
         // Collector Dashboard Screen
         composable(Screen.CollectorDashboard.route) {
             CollectorDashboardScreen(
@@ -560,6 +565,7 @@ fun SampahJujurNavGraph(
                         Screen.CollectorDashboard.route -> { /* Already here */ }
                         Screen.CollectorMap.route -> navController.navigate(Screen.CollectorMap.route)
                         Screen.CollectorProfile.route -> navController.navigate(Screen.CollectorProfile.route)
+                        Screen.PriceBoard.route -> navController.navigate(Screen.PriceBoard.route)
                         else -> navController.navigate(route)
                     }
                 }
@@ -574,6 +580,7 @@ fun SampahJujurNavGraph(
                         Screen.CollectorDashboard.route -> navController.navigate(Screen.CollectorDashboard.route)
                         Screen.CollectorMap.route -> { /* Already here */ }
                         Screen.CollectorProfile.route -> navController.navigate(Screen.CollectorProfile.route)
+                        Screen.PriceBoard.route -> navController.navigate(Screen.PriceBoard.route)
                     }
                 },
                 onRequestSelected = { requestId ->

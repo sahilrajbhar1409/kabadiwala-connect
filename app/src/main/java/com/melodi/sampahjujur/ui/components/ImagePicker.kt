@@ -60,7 +60,10 @@ fun ImagePicker(
     imageUri: Uri?,
     onImageSelected: (Uri) -> Unit,
     onImageRemoved: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    imageUris: List<Uri> = emptyList(),
+    onImagesChanged: ((List<Uri>) -> Unit)? = null,
+    maxImages: Int = 6
 ) {
     val context = LocalContext.current
     var showImageSourceDialog by remember { mutableStateOf(false) }
@@ -71,7 +74,11 @@ fun ImagePicker(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempCameraUri != null) {
-            onImageSelected(tempCameraUri!!)
+            if (onImagesChanged != null) {
+                onImagesChanged.invoke((imageUris + tempCameraUri!!).distinct().take(maxImages))
+            } else {
+                onImageSelected(tempCameraUri!!)
+            }
         }
     }
 
@@ -80,6 +87,12 @@ fun ImagePicker(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { onImageSelected(it) }
+    }
+
+    val multipleGalleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris ->
+        onImagesChanged?.invoke((imageUris + uris).distinct().take(maxImages))
     }
 
     // Permission launcher for camera
@@ -107,7 +120,8 @@ fun ImagePicker(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            galleryLauncher.launch("image/*")
+            if (onImagesChanged != null) multipleGalleryLauncher.launch("image/*")
+            else galleryLauncher.launch("image/*")
         }
     }
 
@@ -149,6 +163,30 @@ fun ImagePicker(
                     }
                 }
             }
+        } else if (onImagesChanged != null && imageUris.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                imageUris.forEach { uri ->
+                    Box {
+                        Image(
+                            painter = rememberAsyncImagePainter(uri),
+                            contentDescription = "Selected waste image",
+                            modifier = Modifier.size(96.dp).clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        IconButton(
+                            onClick = { onImagesChanged.invoke(imageUris - uri) },
+                            modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                        ) {
+                            Icon(Icons.Default.Close, "Remove image")
+                        }
+                    }
+                }
+            }
+            OutlinedButton(
+                onClick = { showImageSourceDialog = true },
+                enabled = imageUris.size < maxImages,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) { Text("Add another photo") }
         } else {
             // Show image picker button
             OutlinedButton(
@@ -246,7 +284,8 @@ fun ImagePicker(
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     galleryPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
                                 } else {
-                                    galleryLauncher.launch("image/*")
+                                    if (onImagesChanged != null) multipleGalleryLauncher.launch("image/*")
+                                    else galleryLauncher.launch("image/*")
                                 }
                             },
                         colors = CardDefaults.cardColors(

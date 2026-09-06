@@ -76,6 +76,27 @@ private fun Map<String, Any?>.referencesLot(lotId: String): Boolean {
     ).any { it?.toString() == lotId }
 }
 
+private fun Map<String, Any?>.backendObjectId(): String? =
+    (this["id"] ?: this["_id"])?.toString()
+
+private fun Map<String, Any?>.backendStatus(): String =
+    this["status"]?.toString().orEmpty()
+
+private fun Map<String, Any?>.referencesTransaction(transactionId: String): Boolean {
+    val transaction = this["transaction"] as? Map<*, *>
+    return listOf(this["transaction"], transaction?.get("id"), transaction?.get("_id"))
+        .any { it?.toString() == transactionId }
+}
+
+private fun Any?.backendDouble(): Double = when (this) {
+    is Number -> toDouble()
+    is String -> toDoubleOrNull() ?: 0.0
+    else -> 0.0
+}
+
+private fun Any?.backendTimestamp(): Long =
+    toString().let { value -> runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(System.currentTimeMillis()) }
+
 /**
  * Primary repository for Person 4 (SIH 26229: Kabadiwala Connect).
  * Implements offline-first collection request creation, Lot ID generation,
@@ -112,7 +133,8 @@ class CollectionRepository @Inject constructor(
         materials: List<ScrapMaterial>,
         approximateWeight: Double,
         quotedPrice: Double,
-        notes: String = ""
+        notes: String = "",
+        photoReferences: List<String> = emptyList()
     ): Result<CollectionRequest> {
         return try {
             val localLotId = LotIdGenerator.generateLotId()
@@ -167,13 +189,27 @@ class CollectionRepository @Inject constructor(
                         address = address,
                         latitude = lat,
                         longitude = lng,
-                        notes = notes
+                        notes = notes,
+                        photos = photoReferences.filter { it.isNotBlank() }.distinct()
                     )
                 )
                 backendResult.exceptionOrNull()?.let {
                     Log.w(TAG, "Backend lot creation failed; retaining local request: ${it.message}")
                 }
-                backendResult.getOrNull()?.backendLotNumber()
+                val backendLot = backendResult.getOrNull()
+                val backendLotId = backendLot?.backendLotNumber()
+                val imageUrl = photoReferences.firstOrNull().orEmpty()
+                if (!backendLotId.isNullOrBlank() && imageUrl.isNotBlank()) {
+                    backendApiRepository.analyzeLot(
+                        lotId = backendLotId,
+                        imageUrl = imageUrl,
+                        weightKg = approximateWeight,
+                        actualPrice = quotedPrice
+                    ).onFailure {
+                        Log.w(TAG, "AI analysis unavailable; retaining lot without analysis: ${it.message}")
+                    }
+                }
+                backendLotId
             } else {
                 null
             }
@@ -240,6 +276,97 @@ class CollectionRepository @Inject constructor(
             Log.w(TAG, "Failed to fetch remote recyclers, using verified catalog: ${e.message}")
             Recycler.getDefaultAuthorizedRecyclers()
         }
+    }
+
+    suspend fun loadBackendRecyclerRequests(): Result<List<CollectionRequest>> {
+        if (!backendApiRepository.isAuthenticated()) return Result.success(emptyList())
+        return try {
+            val lots = backendApiRepository.lots().getOrThrow()
+            val offers = backendApiRepository.offers().getOrDefault(emptyList())
+            val transactions = backendApiRepository.transactions().getOrDefault(emptyList())
+            val payments = backendApiRepository.payments().getOrDefault(emptyList())
+            val recyclerId = authRepository.getCurrentUser()?.id.orEmpty()
+
+            val offerLots = offers.mapNotNull { it["lot"] as? Map<*, *> }
+                .map { nested -> nested.entries.associate { (key, value) -> key.toString() to value } }
+            val allLots = (lots + offerLots).distinctBy { (it["id"] ?: it["_id"] ?: it["lotNumber"]).toString() }
+
+            Result.success(allLots.map { lot ->
+                val lotNumber = (lot["lotNumber"] ?: lot["id"] ?: lot["_id"]).toString()
+                val offer = offers.firstOrNull { it.referencesLot(lotNumber) }
+                val transaction = transactions.firstOrNull { it.referencesLot(lotNumber) }
+                val transactionId = transaction?.backendObjectId()
+                val payment = transactionId?.let { id -> payments.firstOrNull { it.referencesTransaction(id) } }
+                val location = lot["location"] as? Map<*, *>
+                val collector = lot["collector"] as? Map<*, *>
+                val weight = lot["approximateWeight"].backendDouble()
+                val estimatedValue = lot["estimatedValue"].backendDouble()
+                val transactionStatus = transaction?.backendStatus().orEmpty()
+                val lotStatus = lot.backendStatus()
+                val status = when {
+                    payment?.get("paymentStatus")?.toString() == "PAID" || lotStatus == "COMPLETED" -> CollectionStatus.COMPLETED
+                    transactionStatus == "HANDED_OVER" -> CollectionStatus.HANDED_OVER
+                    transactionStatus == "IN_PROGRESS" -> CollectionStatus.HANDOVER_PENDING
+                    transactionStatus == "SCHEDULED" -> CollectionStatus.SCHEDULED
+                    transactionStatus == "CREATED" -> CollectionStatus.ACCEPTED
+                    else -> CollectionStatus.RECYCLER_ASSIGNED
+                }
+                CollectionRequest(
+                    id = lot.backendObjectId().orEmpty(),
+                    lotId = lotNumber,
+                    collectorId = (collector?.get("id") ?: collector?.get("_id"))?.toString().orEmpty(),
+                    recyclerId = recyclerId,
+                    recyclerName = "",
+                    materials = listOf(
+                        ScrapMaterial(
+                            category = lot["materialCategory"]?.toString().orEmpty(),
+                            description = lot["materialDescription"]?.toString().orEmpty(),
+                            approximateWeight = weight,
+                            currentBuyingRate = if (weight > 0) estimatedValue / weight else 0.0,
+                            estimatedValue = estimatedValue,
+                            quotedPrice = offer?.get("quotedPrice").backendDouble()
+                        )
+                    ),
+                    totalWeight = weight,
+                    quotedPrice = offer?.get("quotedPrice").backendDouble().takeIf { it > 0 } ?: estimatedValue,
+                    finalSaleValue = transaction?.get("finalAmount").backendDouble().takeIf { it > 0 }
+                        ?: transaction?.get("agreedAmount").backendDouble(),
+                    status = status.name,
+                    collectionLocation = location?.get("city")?.toString().orEmpty(),
+                    latitude = location?.get("latitude").backendDouble(),
+                    longitude = location?.get("longitude").backendDouble(),
+                    createdAt = lot["createdAt"].backendTimestamp(),
+                    paymentMethod = payment?.get("paymentMethod")?.toString(),
+                    paymentStatus = payment?.get("paymentStatus")?.toString() ?: PaymentStatus.PENDING.name,
+                    paymentReference = payment?.get("paymentReference")?.toString()
+                )
+            })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun submitBackendOffer(lotId: String): Result<Unit> {
+        if (!backendApiRepository.isAuthenticated()) return Result.failure(IllegalStateException("Backend session unavailable"))
+        val backendLot = backendApiRepository.lots().getOrNull()
+            ?.firstOrNull { (it["lotNumber"] ?: it["id"] ?: it["_id"])?.toString() == lotId }
+            ?: return Result.failure(IllegalStateException("Backend lot not found: $lotId"))
+        val quotedPrice = backendLot["estimatedValue"].backendDouble()
+        return backendApiRepository.createOffer(
+            com.melodi.sampahjujur.api.BackendCreateOfferRequest(
+                lotId = backendLot.backendObjectId().orEmpty(),
+                quotedPrice = quotedPrice,
+                message = "Offer submitted from Recycler Intake Hub"
+            )
+        ).map { Unit }
+    }
+
+    suspend fun rejectBackendOffer(lotId: String): Result<Unit> {
+        if (!backendApiRepository.isAuthenticated()) return Result.failure(IllegalStateException("Backend session unavailable"))
+        val offer = backendApiRepository.offers().getOrNull()
+            ?.firstOrNull { it.referencesLot(lotId) && it.backendStatus() == "PENDING" }
+            ?: return Result.failure(IllegalStateException("No pending backend offer exists for Lot $lotId"))
+        return backendApiRepository.rejectOffer(offer.backendObjectId().orEmpty()).map { Unit }
     }
 
     /**
@@ -316,6 +443,11 @@ class CollectionRepository @Inject constructor(
                 CollectionStatus.COLLECTED -> req = req.copy(collectedAt = now)
                 CollectionStatus.HANDED_OVER -> req = req.copy(handedOverAt = now)
                 else -> Unit
+            }
+
+            val backendStatusResult = syncBackendStatus(lotId, newStatus, req.scheduledAt)
+            if (backendStatusResult.isFailure) {
+                return Result.failure(backendStatusResult.exceptionOrNull()!!)
             }
 
             collectionRequestDao.update(CollectionRequestEntity.fromCollectionRequest(req))
@@ -468,6 +600,28 @@ class CollectionRepository @Inject constructor(
         finalSaleValue: Double? = null
     ): Result<HandoverRecord> {
         return try {
+            val currentFirebaseUser = authRepository.getCurrentUser()
+            if (backendApiRepository.isAuthenticated() && currentFirebaseUser?.isCollector() == true) {
+                return Result.failure(
+                    IllegalStateException("Recycler confirmation must be completed by the recycler account")
+                )
+            }
+
+            if (backendApiRepository.isAuthenticated()) {
+                val transactionId = backendTransactionId(lotId)
+                    ?: return Result.failure(IllegalStateException("No backend transaction exists for Lot $lotId"))
+                val backendResult = backendApiRepository.createHandover(
+                    com.melodi.sampahjujur.api.BackendHandoverRequest(
+                        transactionId = transactionId,
+                        weight = verifiedWeight ?: 0.0,
+                        address = ""
+                    )
+                )
+                if (backendResult.isFailure) {
+                    return Result.failure(backendResult.exceptionOrNull()!!)
+                }
+            }
+
             val reqEntity = collectionRequestDao.getByLotId(lotId)
                 ?: throw IllegalStateException("Collection request not found for Lot ID: $lotId")
             val currentReq = reqEntity.toCollectionRequest()
@@ -676,6 +830,43 @@ class CollectionRepository @Inject constructor(
         return transactions.firstOrNull { it.referencesLot(lotId) }?.backendId()
     }
 
+    private suspend fun backendOfferId(lotId: String): String? {
+        if (!backendApiRepository.isAuthenticated()) return null
+        return backendApiRepository.offers().getOrNull()
+            ?.firstOrNull { it.referencesLot(lotId) && it.backendStatus() == "PENDING" }
+            ?.backendObjectId()
+    }
+
+    private suspend fun syncBackendStatus(
+        lotId: String,
+        status: CollectionStatus,
+        scheduledAtMillis: Long?
+    ): Result<Unit> {
+        if (!backendApiRepository.isAuthenticated()) return Result.success(Unit)
+        try {
+            val result = when (status) {
+                CollectionStatus.ACCEPTED -> {
+                    val offerId = backendOfferId(lotId)
+                        ?: return Result.failure(IllegalStateException("No pending backend offer exists for Lot $lotId"))
+                    backendApiRepository.acceptOffer(offerId)
+                }
+                CollectionStatus.SCHEDULED -> {
+                    val transactionId = backendTransactionId(lotId)
+                        ?: return Result.failure(IllegalStateException("No backend transaction exists for Lot $lotId"))
+                    val scheduledAt = java.time.Instant.ofEpochMilli(
+                        scheduledAtMillis ?: System.currentTimeMillis()
+                    ).toString()
+                    backendApiRepository.scheduleTransaction(transactionId, scheduledAt)
+                }
+                else -> return Result.success(Unit)
+            }
+            return result.map { Unit }
+        } catch (e: Exception) {
+            Log.w(TAG, "Backend lifecycle sync deferred for $lotId: ${e.message}")
+            return Result.failure(e)
+        }
+    }
+
     private suspend fun syncBackendHandover(
         lotId: String,
         weight: Double,
@@ -876,7 +1067,7 @@ class CollectionRepository @Inject constructor(
                 )
             }
 
-            val chain = LotTraceabilityChain(
+            val localChain = LotTraceabilityChain(
                 lotId = lotId,
                 collectionRequest = request,
                 handoverRecord = handover,
@@ -885,6 +1076,35 @@ class CollectionRepository @Inject constructor(
                 materials = request.materials,
                 timeline = timeline
             )
+
+            val backendTimeline = backendApiRepository.trace(lotId).getOrNull()
+                ?.get("timeline") as? List<*>
+            val mappedBackendTimeline = backendTimeline?.mapNotNull { raw ->
+                val event = raw as? Map<*, *> ?: return@mapNotNull null
+                val stage = when (event["step"]?.toString()) {
+                    "LOT" -> CollectionStatus.CREATED
+                    "OFFER" -> CollectionStatus.RECYCLER_ASSIGNED
+                    "TRANSACTION" -> CollectionStatus.ACCEPTED
+                    "HANDOVER" -> CollectionStatus.HANDED_OVER
+                    "PAYMENT" -> CollectionStatus.COMPLETED
+                    else -> CollectionStatus.CREATED
+                }
+                TraceabilityEvent(
+                    stage = stage,
+                    title = event["step"]?.toString() ?: "Backend event",
+                    description = event["detail"]?.toString().orEmpty(),
+                    timestamp = event["at"]?.toString()?.let { value ->
+                        runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
+                    } ?: System.currentTimeMillis(),
+                    isCompleted = true
+                )
+            }.orEmpty()
+
+            val chain = if (mappedBackendTimeline.isNotEmpty()) {
+                localChain.copy(timeline = mappedBackendTimeline)
+            } else {
+                localChain
+            }
 
             Result.success(chain)
         } catch (e: Exception) {
