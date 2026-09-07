@@ -14,6 +14,9 @@ import com.kabadiwalaconnect.presentation.citizen.HomeScreen
 import com.kabadiwalaconnect.presentation.citizen.NearbyScreen
 import com.kabadiwalaconnect.presentation.citizen.PickupScreen
 import com.kabadiwalaconnect.presentation.citizen.PickupConfirmationScreen
+import com.kabadiwalaconnect.presentation.citizen.PersonalInformationScreen
+import com.kabadiwalaconnect.presentation.citizen.SavedAddressesScreen
+import com.kabadiwalaconnect.presentation.citizen.RewardsScreen
 import com.kabadiwalaconnect.presentation.citizen.ProfileScreen
 import com.kabadiwalaconnect.presentation.citizen.SettingsScreen
 import com.kabadiwalaconnect.presentation.citizen.TrackingScreen
@@ -62,7 +65,10 @@ fun AppNavigation() {
         composable(Routes.HISTORY) { HistoryScreen(navController) }
         composable(Routes.NEARBY) { NearbyScreen(navController) }
         composable(Routes.PROFILE) { ProfileScreen(navController) }
-        composable(Routes.SETTINGS) { SettingsScreen(navController) }
+composable(Routes.PERSONAL_INFORMATION) { PersonalInformationScreen(navController) }
+composable(Routes.SAVED_ADDRESSES) { SavedAddressesScreen(navController) }
+composable(Routes.REWARDS) { RewardsScreen(navController) }
+composable(Routes.SETTINGS) { SettingsScreen(navController) }
         composable(Routes.COLLECTOR_DASHBOARD) { CollectorDashboardScreen(navController) }
         composable(Routes.COLLECTOR_REQUESTS) { CollectorRequestsScreen(navController) }
         composable(Routes.COLLECTOR_ACTIVE_PICKUP) { CollectorActivePickupScreen(navController) }

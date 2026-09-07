@@ -1,5 +1,8 @@
 package com.kabadiwalaconnect.presentation.collector
-
+import androidx.compose.runtime.LaunchedEffect
+import com.kabadiwalaconnect.data.auth.FirebaseAuthRepository
+import com.kabadiwalaconnect.data.model.CollectionRequest
+import com.kabadiwalaconnect.data.repository.PriceServiceProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +50,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -469,7 +473,7 @@ fun CollectorHandoverScreen(nav: NavHostController, lotId: String?) {
                             .height(150.dp)
                     )
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { useManualLocation = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    TextButton(onClick = { useManualLocation = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Enter location manually", color = Green)
                     }
                 } else {
@@ -484,7 +488,7 @@ fun CollectorHandoverScreen(nav: NavHostController, lotId: String?) {
                         shape = RoundedCornerShape(14.dp)
                     )
                     if (location != null) {
-                        TextButton(onClick = { useManualLocation = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        TextButton(onClick = { useManualLocation = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Use GPS location", color = Green)
                         }
                     }
@@ -707,3 +711,4 @@ private fun LotStatus.collectorLabel(): String = when (this) {
     LotStatus.COLLECTED -> "COLLECTED"
     else -> name
 }
+

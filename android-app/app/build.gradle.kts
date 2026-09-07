@@ -1,4 +1,4 @@
-﻿import java.util.Properties
+import java.util.Properties
 import java.io.FileInputStream
 
 plugins {
@@ -81,7 +81,7 @@ dependencies {
     // Cloudinary for Image Upload
     implementation("com.cloudinary:cloudinary-android:2.5.0")
 
-    implementation("androidx.navigation:androidx.navigation:navigation-compose:2.9.3")
+    implementation("androidx.navigation:navigation-compose:2.9.3")
 
     implementation("androidx.compose.material:material-icons-extended")
     implementation(platform(libs.androidx.compose.bom))

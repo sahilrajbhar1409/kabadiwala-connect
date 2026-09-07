@@ -152,7 +152,7 @@ fun PickupScreen(nav: NavHostController) {
                             .height(180.dp)
                     )
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { useManualLocation = true }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    TextButton(onClick = { useManualLocation = true }, modifier = Modifier.fillMaxWidth()) {
                         Text("Enter address manually", color = Green)
                     }
                 } else {
@@ -167,7 +167,7 @@ fun PickupScreen(nav: NavHostController) {
                         singleLine = true
                     )
                     if (location != null) {
-                        TextButton(onClick = { useManualLocation = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                        TextButton(onClick = { useManualLocation = false }, modifier = Modifier.fillMaxWidth()) {
                             Text("Use GPS location", color = Green)
                         }
                     } else {

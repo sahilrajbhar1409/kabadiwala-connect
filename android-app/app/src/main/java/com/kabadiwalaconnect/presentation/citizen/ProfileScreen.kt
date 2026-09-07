@@ -55,9 +55,23 @@ fun ProfileScreen(nav: NavHostController) {
                     Text("+91 XXXXX XXXXX", color = TextMuted)
                 }
             }
-            item { ProfileOption(Icons.Default.Person, "Personal information") }
-            item { ProfileOption(Icons.Default.LocationOn, "Saved addresses") }
-            item { ProfileOption(Icons.Default.Star, "Rewards & impact") }
+           item {
+    ProfileOption(Icons.Default.Person, "Personal information") {
+        nav.navigate(Routes.PERSONAL_INFORMATION)
+    }
+}
+
+item {
+    ProfileOption(Icons.Default.LocationOn, "Saved addresses") {
+        nav.navigate(Routes.SAVED_ADDRESSES)
+    }
+}
+
+item {
+    ProfileOption(Icons.Default.Star, "Rewards & impact") {
+        nav.navigate(Routes.REWARDS)
+    }
+}
             item {
                 ProfileOption(Icons.Default.Settings, "Settings") {
                     nav.navigate(Routes.SETTINGS)
